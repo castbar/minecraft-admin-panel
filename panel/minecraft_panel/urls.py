@@ -8,7 +8,7 @@ from django.views.static import serve
 from django.http import FileResponse, Http404
 from pathlib import Path
 import os
-from server.views import views, views_api, views_settings, views_backup, views_auth, views_docker, views_pages, views_versions, views_mods, views_mods_config, views_mods_config_simple, views_mods_pool
+from server.views import views, views_api, views_settings, views_backup, views_auth, views_docker, views_versions, views_mods, views_mods_config, views_mods_config_simple, views_mods_pool
 
 # Ruta al frontend compilado (si existe)
 FRONTEND_DIST = Path(__file__).resolve().parent.parent.parent / 'frontend' / 'dist'
@@ -53,6 +53,12 @@ urlpatterns = [
         path('servers/switch/', views_api.switch_server, name='switch_server'),
         path('servers/sessions/', views_api.saved_sessions, name='saved_sessions'),
         path('security/logs/', views_api.security_logs, name='security_logs'),
+        
+        # Pool de mods precargados (debe ir antes de /mods/ para evitar conflictos)
+        path('mods/pool/', views_mods_pool.mods_pool_list, name='mods_pool_list'),
+        path('mods/pool/categories/', views_mods_pool.mods_pool_categories, name='mods_pool_categories'),
+        path('mods/pool/<int:mod_id>/', views_mods_pool.mods_pool_detail, name='mods_pool_detail'),
+        path('mods/pool/create/', views_mods_pool.mods_pool_create, name='mods_pool_create'),
         
         # API antigua (compatibilidad)
         path('whitelist/', views.whitelist_api, name='whitelist_api'),
@@ -120,36 +126,26 @@ urlpatterns = [
         path('minecraft/versions/', views_versions.available_versions, name='available_versions'),
         path('minecraft/versions/latest/', views_versions.latest_version, name='latest_version'),
         path('minecraft/versions/create/', views_versions.create_version, name='create_version'),
-        
-        # Pool de mods precargados
-        path('mods/pool/', views_mods_pool.mods_pool_list, name='mods_pool_list'),
-        path('mods/pool/categories/', views_mods_pool.mods_pool_categories, name='mods_pool_categories'),
-        path('mods/pool/<int:mod_id>/', views_mods_pool.mods_pool_detail, name='mods_pool_detail'),
-        path('mods/pool/create/', views_mods_pool.mods_pool_create, name='mods_pool_create'),
     ])),
     
-    # Rutas legacy para compatibilidad (templates Django)
+    # Autenticación (solo login/logout, el frontend Ionic maneja el resto)
     path('login/', views_auth.LoggedLoginView.as_view(template_name='panel/login.html'), name='login'),
     path('logout/', auth_views.LogoutView.as_view(), name='logout'),
     
-    # Páginas Django (deben ir antes del catch-all del frontend)
-    path('control/', views_pages.control_page, name='control_page'),
-    path('players/', views_pages.players_page, name='players_page'),
-    path('mods/', views_pages.mods_page, name='mods_page'),
-    path('settings/', views_pages.settings_page, name='settings_page'),
-    path('logs/', views_pages.logs_page, name='logs_page'),
-    
-    # Servir archivos estáticos del frontend (JS, CSS, imágenes, etc.) ANTES del catch-all
+    # Servir archivos estáticos del frontend Ionic (JS, CSS, imágenes, etc.) ANTES del catch-all
     # Usar vista personalizada para MIME types correctos
 ] + ([re_path(r'^(.+\.(css|js|png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|eot|json))$', serve_frontend_static)] 
     if FRONTEND_DIST.exists() and (FRONTEND_DIST / 'index.html').exists() else []) + [
     
-    # Si existe frontend compilado, servirlo; si no, usar templates Django
-    # Excluir api, admin, static, media, login, logout, control, players, mods, settings, logs y archivos estáticos
-    re_path(r'^(?!api|admin|static|media|login|logout|control|players|mods|settings|logs|.*\.(css|js|png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|eot|json)).*$', serve, {
+    # Servir frontend Ionic compilado - todas las rutas que no sean API, admin, static, media, login, logout
+    # se sirven desde el index.html del frontend (SPA routing)
+    re_path(r'^(?!api|admin|static|media|login|logout|.*\.(css|js|png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|eot|json)).*$', serve, {
         'document_root': str(FRONTEND_DIST),
         'path': 'index.html'
-    }) if FRONTEND_DIST.exists() and (FRONTEND_DIST / 'index.html').exists() else path('', views.dashboard, name='dashboard'),
+    }) if FRONTEND_DIST.exists() and (FRONTEND_DIST / 'index.html').exists() else [
+        # Si no hay frontend compilado, redirigir a login
+        path('', lambda request: redirect('/login/'), name='home'),
+    ],
 ]
 
 

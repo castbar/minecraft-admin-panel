@@ -1,6 +1,7 @@
 #!/bin/bash
 # Script para construir y subir imagen del panel Django al registry
-# Compila el frontend localmente y luego construye la imagen
+# NOTA: Este script solo construye el backend Django (APIs y admin)
+# El frontend se construye con build-and-push-frontend.sh
 
 set -e
 
@@ -12,36 +13,35 @@ NC='\033[0m' # No Color
 
 # Variables
 REGISTRY="${DOCKER_REGISTRY:-registry.castbar.dev}"
-NAMESPACE="castbar"
+NAMESPACE="${DOCKER_NAMESPACE:-castbar}"
 IMAGE_NAME="minecraft-admin-panel"
-VERSION="${1:-latest}"  # Usar versión pasada como argumento o 'latest' por defecto
+VERSION="${1:-latest}"
 
 FULL_IMAGE="${REGISTRY}/${NAMESPACE}/${IMAGE_NAME}:${VERSION}"
 
 # Ir al directorio raíz del proyecto
 cd "$(dirname "$0")/.."
 
-echo -e "${BLUE}📦 Construyendo imagen: ${FULL_IMAGE}${NC}"
+echo -e "${BLUE}📦 Construyendo imagen del panel Django: ${FULL_IMAGE}${NC}"
 
-# Compilar frontend si existe
-if [ -d "frontend" ] && [ -f "frontend/package.json" ]; then
-    echo -e "${BLUE}🔨 Compilando frontend...${NC}"
-    cd frontend
-    if [ ! -d "node_modules" ]; then
-        echo -e "${YELLOW}📦 Instalando dependencias del frontend...${NC}"
-        npm install --legacy-peer-deps
-    fi
-    npm run build -- --configuration production
-    cd ..
-    echo -e "${GREEN}✅ Frontend compilado${NC}"
-else
-    echo -e "${YELLOW}⚠️  Frontend no encontrado, creando directorio vacío para evitar error en COPY${NC}"
-    mkdir -p frontend/dist
-    touch frontend/dist/.gitkeep
+# Verificar que el Dockerfile existe
+if [ ! -f "panel/Dockerfile" ]; then
+    echo -e "${YELLOW}❌ Error: panel/Dockerfile no encontrado${NC}"
+    exit 1
 fi
 
-# Construir imagen desde la raíz del proyecto
+# Verificar que requirements.txt existe
+if [ ! -f "panel/requirements.txt" ]; then
+    echo -e "${YELLOW}❌ Error: panel/requirements.txt no encontrado${NC}"
+    exit 1
+fi
+
+# Construir imagen desde el directorio raíz (contexto completo)
+# El Dockerfile copia panel/ desde el contexto
 echo -e "${BLUE}🐳 Construyendo imagen Docker...${NC}"
+echo -e "${BLUE}   Contexto: . (directorio raíz)${NC}"
+echo -e "${BLUE}   Dockerfile: panel/Dockerfile${NC}"
+
 docker buildx build --platform linux/amd64 -t "${FULL_IMAGE}" -f panel/Dockerfile . --push
 
 echo -e "${GREEN}✅ Imagen construida y subida${NC}"

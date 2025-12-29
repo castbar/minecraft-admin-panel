@@ -235,7 +235,11 @@ class MinecraftUser(models.Model):
         
         self.password_set_token = secrets.token_urlsafe(32)
         self.password_set_token_expires = timezone.now() + timedelta(hours=24)
-        self.save(update_fields=['password_set_token', 'password_set_token_expires'])
+        # Guardar todos los campos si no tiene ID, o solo los campos del token si ya existe
+        if self.pk:
+            self.save(update_fields=['password_set_token', 'password_set_token_expires'])
+        else:
+            self.save()  # Guardar completo si es nuevo
         return self.password_set_token
     
     def is_password_set_token_valid(self, token):

@@ -300,19 +300,23 @@ def minecraft_user_create(request, server_id):
             }, status=400)
         user.set_password(password)
         user.is_active = True
+        user.save()
     else:
-        # Generar token para establecer contraseña
+        # Guardar usuario primero para obtener ID
+        user.save()
+        
+        # Generar token para establecer contraseña (ahora que tiene ID)
         token = user.generate_password_set_token()
         
         # Enviar email con token
         email_sent = _send_password_set_email(user, token)
         if not email_sent:
+            # Si falla el email, eliminar el usuario creado
+            user.delete()
             return JsonResponse({
                 'success': False,
                 'error': 'Failed to send email. Please check email configuration.'
             }, status=500)
-    
-    user.save()
     
     return JsonResponse({
         'success': True,

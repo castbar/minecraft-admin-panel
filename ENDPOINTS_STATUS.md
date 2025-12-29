@@ -46,20 +46,34 @@
 - [x] `POST /api/minecraft/versions/create/` - Crear nueva versión ✅
 
 ## Multi-servidor
-**Nota:** "Servidor activo" NO significa que solo un servidor esté ejecutándose. Significa **qué servidor está seleccionado actualmente en el panel web** para el usuario. **Todos los servidores pueden ejecutarse simultáneamente**, cada uno con su propio puerto (configurado en `server.properties`). Los jugadores se conectan directamente usando `IP:PUERTO` de cada servidor.
+**IMPORTANTE:** El cliente SIEMPRE debe enviar `server_id` en cada request. El servidor NO mantiene estado del cliente.
 
-- [ ] `POST /api/servers/switch/` - Cambiar servidor seleccionado en el panel (solo afecta qué datos se muestran, NO qué servidores están ejecutándose) ❌ (403 - CSRF)
+**Formas de enviar `server_id`:**
+1. **En la URL (recomendado)**: `/api/servers/<server_id>/status/`
+2. **Query parameter**: `?server_id=<id>`
+3. **Header HTTP**: `X-Server-ID: <id>`
+4. **Body JSON (POST)**: `{"server_id": <id>, ...}`
+
+**Endpoints que NO necesitan server_id:**
+- `GET /api/servers/` - Lista todos los servidores
+- `GET /api/servers/sessions/` - Sesiones del usuario (opcional)
+- `GET /api/security/logs/` - Logs globales
+- `GET /api/minecraft/versions/` - Versiones globales
+
+- [x] `POST /api/servers/switch/` - [DEPRECATED] Guardar sesión opcional (el cliente maneja server_id) ✅
 - [x] `GET /api/servers/sessions/` - Sesiones guardadas (historial de servidores usados por el usuario) ✅
 - [x] `GET /api/security/logs/` - Logs de seguridad ✅
 
 ## Legacy (Compatibilidad)
-- [x] `GET /api/whitelist/` - Whitelist (legacy) ✅
-- [ ] `POST /api/whitelist/<action>/` - Acción whitelist (legacy) (no testeado)
-- [x] `GET /api/mods/` - Listar mods (legacy) ✅
-- [ ] `POST /api/mods/<action>/` - Acción mods (legacy) (no testeado)
-- [x] `GET /api/players/` - Listar jugadores (legacy) ✅
-- [ ] `GET /api/logs/` - Logs del servidor (legacy) ❌ (500 - Server Error)
-- [ ] `POST /api/command/` - Ejecutar comando (legacy) (no testeado)
+**NOTA:** Todos los endpoints legacy ahora REQUIEREN `server_id` (query param, header `X-Server-ID`, o body JSON). Ya no hay detección automática.
+
+- [x] `GET /api/whitelist/` - Whitelist (legacy) ✅ (requiere `server_id`)
+- [x] `POST /api/whitelist/<action>/` - Acción whitelist (legacy) ✅ (requiere `server_id`)
+- [x] `GET /api/mods/` - Listar mods (legacy) ✅ (requiere `server_id`)
+- [x] `POST /api/mods/<action>/` - Acción mods (legacy) ✅ (requiere `server_id`)
+- [x] `GET /api/players/` - Listar jugadores (legacy) ✅ (requiere `server_id`)
+- [x] `GET /api/logs/` - Logs del servidor (legacy) ✅ (requiere `server_id`)
+- [x] `POST /api/command/` - Ejecutar comando (legacy) ✅ (requiere `server_id`)
 
 ## Resumen
 - ✅ Funcionando: 28/28 (100%)
@@ -70,6 +84,7 @@
 
 ## Notas
 - ✅ @csrf_exempt agregado a todos los endpoints POST que lo necesitaban
+- ✅ **REFACTOR: Manejo de server_id por el cliente** - Todos los endpoints ahora requieren que el cliente envíe `server_id` explícitamente (URL, query param, header `X-Server-ID`, o body JSON). Se eliminó la lógica de detección automática del servidor. El servidor es ahora stateless respecto al servidor seleccionado.
 - ✅ `POST /api/servers/create/` testeado completamente - funciona correctamente, valida campos requeridos, puerto RCON, permisos y crea UserServerRole
 - ✅ `POST /api/servers/<id>/control/<action>/` testeado completamente - funciona correctamente, valida acciones (start/stop/restart/pause/unpause), permisos (control_server), container_name y maneja errores de Docker
 - ✅ `GET /api/servers/<id>/container/` testeado completamente - funciona correctamente, verifica permisos (view), usa container_name o host como fallback, retorna 404 cuando el contenedor no existe (comportamiento esperado)

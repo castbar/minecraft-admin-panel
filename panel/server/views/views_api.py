@@ -437,17 +437,66 @@ def whitelist_list(request, server_id):
     except Exception as e:
         return JsonResponse({'success': False, 'error': str(e)}, status=500)
 
+def _get_server_id_from_request(request):
+    """
+    Obtener server_id de la request en este orden:
+    1. URL parameter (path): /api/servers/<id>/... (ya extraído por Django)
+    2. Query parameter: ?server_id=<id>
+    3. Header: X-Server-ID
+    4. Body JSON (POST): {"server_id": <id>}
+    
+    Returns: server_id (int) or None
+    """
+    # 1. De la URL (si está en el path, Django lo pone en kwargs)
+    if hasattr(request, 'resolver_match') and request.resolver_match:
+        server_id = request.resolver_match.kwargs.get('server_id')
+        if server_id:
+            return int(server_id)
+    
+    # 2. Query parameter
+    server_id = request.GET.get('server_id')
+    if server_id:
+        try:
+            return int(server_id)
+        except (ValueError, TypeError):
+            pass
+    
+    # 3. Header
+    server_id = request.headers.get('X-Server-ID')
+    if server_id:
+        try:
+            return int(server_id)
+        except (ValueError, TypeError):
+            pass
+    
+    # 4. Body JSON (solo para POST/PUT/PATCH)
+    if request.method in ['POST', 'PUT', 'PATCH'] and request.body:
+        try:
+            data = json.loads(request.body)
+            server_id = data.get('server_id')
+            if server_id:
+                return int(server_id)
+        except (json.JSONDecodeError, ValueError, TypeError):
+            pass
+    
+    return None
+
 @csrf_exempt
 @login_required
 @require_http_methods(["POST"])
 def switch_server(request):
-    """Cambiar de servidor activo"""
+    """
+    [DEPRECATED] Guardar sesión de servidor (opcional)
+    
+    NOTA: Este endpoint es opcional. El cliente debe enviar siempre server_id
+    en cada request (URL, query param o header X-Server-ID).
+    Este endpoint solo guarda una sesión para mostrar "último servidor usado".
+    """
     try:
-        data = json.loads(request.body)
-        server_id = data.get('server_id')
+        server_id = _get_server_id_from_request(request)
         
         if not server_id:
-            return JsonResponse({'success': False, 'error': 'Server ID required'}, status=400)
+            return JsonResponse({'success': False, 'error': 'Server ID required (send in URL, query param, header X-Server-ID, or body)'}, status=400)
         
         server = get_object_or_404(Server, id=server_id, is_active=True)
         user_role = UserServerRole.objects.filter(user=request.user, server=server).first()
@@ -455,7 +504,7 @@ def switch_server(request):
         if not user_role:
             return JsonResponse({'success': False, 'error': 'No access to this server'}, status=403)
         
-        # Actualizar o crear sesión
+        # Actualizar o crear sesión (opcional, solo para historial)
         from ..models.models_multi import ServerSession
         ServerSession.objects.update_or_create(
             user=request.user,
@@ -465,7 +514,7 @@ def switch_server(request):
         
         return JsonResponse({
             'success': True,
-            'message': f'Switched to server {server.name}',
+            'message': f'Session saved for server {server.name}',
             'server': {
                 'id': server.id,
                 'name': server.name,

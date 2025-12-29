@@ -189,40 +189,34 @@ def whitelist_api(request):
 @login_required
 @require_http_methods(["POST"])
 def whitelist_action(request, action):
-    """Agregar o eliminar usuario de whitelist - Usa servidor detectado o por defecto"""
+    """Agregar o eliminar usuario de whitelist - REQUIERE server_id (query param, header X-Server-ID, o body JSON)"""
     from .models import Server
     
     try:
+        server_id = _get_server_id_from_request(request)
+        
+        if not server_id:
+            return JsonResponse({
+                'success': False, 
+                'error': 'Server ID required. Send ?server_id=<id>, header X-Server-ID: <id>, or {"server_id": <id>} in body'
+            }, status=400)
+        
+        try:
+            server = Server.objects.get(id=server_id, is_active=True)
+        except Server.DoesNotExist:
+            return JsonResponse({'success': False, 'error': 'Server not found'}, status=404)
+        
+        # Verificar permisos
+        from ..models import UserServerRole
+        user_role = UserServerRole.objects.filter(user=request.user, server=server).first()
+        if not user_role:
+            return JsonResponse({'success': False, 'error': 'No access to this server'}, status=403)
+        
         data = json.loads(request.body)
         username = data.get('username', '').strip()
         
         if not username:
             return JsonResponse({'success': False, 'error': 'Username required'})
-        
-        # Detectar servidor desde la request o usar el primero disponible
-        server = None
-        server_id = data.get('server_id')
-        
-        if server_id:
-            try:
-                server = Server.objects.get(id=server_id, is_active=True)
-            except Server.DoesNotExist:
-                pass
-        
-        # Si no hay server_id, usar el detectado o el primero disponible
-        if not server:
-            detected_server = _detect_server_from_request(request)
-            if detected_server:
-                server = detected_server
-            else:
-                # Usar el primer servidor activo
-                server = Server.objects.filter(is_active=True).first()
-        
-        if not server:
-            return JsonResponse({
-                'success': False, 
-                'error': 'No server configured. Please configure a server in Django admin.'
-            }, status=500)
         
         rcon = _get_rcon_connection(server)
         if rcon is None:
@@ -248,25 +242,66 @@ def whitelist_action(request, action):
     except Exception as e:
         return JsonResponse({'success': False, 'error': f'RCON error: {str(e)}'})
 
+def _get_server_id_from_request(request):
+    """
+    Obtener server_id de la request en este orden:
+    1. Query parameter: ?server_id=<id>
+    2. Header: X-Server-ID
+    3. Body JSON (POST): {"server_id": <id>}
+    
+    Returns: server_id (int) or None
+    """
+    # 1. Query parameter
+    server_id = request.GET.get('server_id')
+    if server_id:
+        try:
+            return int(server_id)
+        except (ValueError, TypeError):
+            pass
+    
+    # 2. Header
+    server_id = request.headers.get('X-Server-ID')
+    if server_id:
+        try:
+            return int(server_id)
+        except (ValueError, TypeError):
+            pass
+    
+    # 3. Body JSON (solo para POST/PUT/PATCH)
+    if request.method in ['POST', 'PUT', 'PATCH'] and request.body:
+        try:
+            data = json.loads(request.body)
+            server_id = data.get('server_id')
+            if server_id:
+                return int(server_id)
+        except (json.JSONDecodeError, ValueError, TypeError):
+            pass
+    
+    return None
+
 @login_required
 @require_http_methods(["GET"])
 def mods_api(request):
-    """Obtener lista de mods instalados"""
+    """Obtener lista de mods instalados - REQUIERE server_id (query param o header X-Server-ID)"""
     try:
-        # Obtener servidor desde parámetro o detectar automáticamente
-        server_id = request.GET.get('server_id')
-        if server_id:
-            try:
-                server = Server.objects.get(id=server_id, is_active=True)
-            except Server.DoesNotExist:
-                return JsonResponse({'success': False, 'error': 'Server not found'}, status=404)
-        else:
-            server = _detect_server_from_request(request)
-            if not server:
-                server = Server.objects.filter(is_active=True).first()
+        server_id = _get_server_id_from_request(request)
         
-        if not server:
-            return JsonResponse({'success': False, 'error': 'No server configured'}, status=500)
+        if not server_id:
+            return JsonResponse({
+                'success': False, 
+                'error': 'Server ID required. Send ?server_id=<id> or header X-Server-ID: <id>'
+            }, status=400)
+        
+        try:
+            server = Server.objects.get(id=server_id, is_active=True)
+        except Server.DoesNotExist:
+            return JsonResponse({'success': False, 'error': 'Server not found'}, status=404)
+        
+        # Verificar permisos
+        from ..models import UserServerRole
+        user_role = UserServerRole.objects.filter(user=request.user, server=server).first()
+        if not user_role:
+            return JsonResponse({'success': False, 'error': 'No access to this server'}, status=403)
         
         mods_path = os.path.join(server.minecraft_data_path, 'mods')
         mods = []
@@ -287,22 +322,26 @@ def mods_api(request):
 @login_required
 @require_http_methods(["POST"])
 def mods_action(request, action):
-    """Agregar o eliminar mod"""
+    """Agregar o eliminar mod - REQUIERE server_id (query param, header X-Server-ID, o body JSON)"""
     try:
-        # Obtener servidor desde parámetro o detectar automáticamente
-        server_id = request.GET.get('server_id') or request.POST.get('server_id')
-        if server_id:
-            try:
-                server = Server.objects.get(id=server_id, is_active=True)
-            except Server.DoesNotExist:
-                return JsonResponse({'success': False, 'error': 'Server not found'}, status=404)
-        else:
-            server = _detect_server_from_request(request)
-            if not server:
-                server = Server.objects.filter(is_active=True).first()
+        server_id = _get_server_id_from_request(request)
         
-        if not server:
-            return JsonResponse({'success': False, 'error': 'No server configured'}, status=500)
+        if not server_id:
+            return JsonResponse({
+                'success': False, 
+                'error': 'Server ID required. Send ?server_id=<id>, header X-Server-ID: <id>, or {"server_id": <id>} in body'
+            }, status=400)
+        
+        try:
+            server = Server.objects.get(id=server_id, is_active=True)
+        except Server.DoesNotExist:
+            return JsonResponse({'success': False, 'error': 'Server not found'}, status=404)
+        
+        # Verificar permisos
+        from ..models import UserServerRole
+        user_role = UserServerRole.objects.filter(user=request.user, server=server).first()
+        if not user_role:
+            return JsonResponse({'success': False, 'error': 'No access to this server'}, status=403)
         
         mods_path = os.path.join(server.minecraft_data_path, 'mods')
         os.makedirs(mods_path, exist_ok=True)
@@ -352,11 +391,30 @@ def mods_action(request, action):
 @login_required
 @require_http_methods(["GET"])
 def players_api(request):
-    """Obtener lista de jugadores online"""
+    """Obtener lista de jugadores online - REQUIERE server_id (query param o header X-Server-ID)"""
     try:
-        rcon = _get_rcon_connection()
+        server_id = _get_server_id_from_request(request)
+        
+        if not server_id:
+            return JsonResponse({
+                'success': False, 
+                'error': 'Server ID required. Send ?server_id=<id> or header X-Server-ID: <id>'
+            }, status=400)
+        
+        try:
+            server = Server.objects.get(id=server_id, is_active=True)
+        except Server.DoesNotExist:
+            return JsonResponse({'success': False, 'error': 'Server not found'}, status=404)
+        
+        # Verificar permisos
+        from ..models import UserServerRole
+        user_role = UserServerRole.objects.filter(user=request.user, server=server).first()
+        if not user_role:
+            return JsonResponse({'success': False, 'error': 'No access to this server'}, status=403)
+        
+        rcon = _get_rcon_connection(server)
         if rcon is None:
-            return JsonResponse({'success': False, 'error': 'Cannot connect to RCON. Check server configuration.'})
+            return JsonResponse({'success': False, 'error': f'Cannot connect to RCON. Server: {server.name}, Host: {server.host}, Port: {server.rcon_port}'})
         
         try:
             response = rcon.command('list')
@@ -380,25 +438,28 @@ def players_api(request):
 @login_required
 @require_http_methods(["GET"])
 def logs_api(request):
-    """Obtener logs recientes del servidor"""
+    """Obtener logs recientes del servidor - REQUIERE server_id (query param o header X-Server-ID)"""
     from .models import Server  # Import Server here to avoid circular imports
     
     try:
-        # Obtener servidor desde parámetro o detectar automáticamente
-        server_id = request.GET.get('server_id')
-        if server_id:
-            try:
-                server = Server.objects.get(id=server_id, is_active=True)
-            except Server.DoesNotExist:
-                return JsonResponse({'success': False, 'error': 'Server not found'}, status=404)
-        else:
-            # Detectar servidor automáticamente
-            server = _detect_server_from_request(request)
-            if not server:
-                server = Server.objects.filter(is_active=True).first()
+        server_id = _get_server_id_from_request(request)
         
-        if not server:
-            return JsonResponse({'success': False, 'error': 'No server configured'}, status=500)
+        if not server_id:
+            return JsonResponse({
+                'success': False, 
+                'error': 'Server ID required. Send ?server_id=<id> or header X-Server-ID: <id>'
+            }, status=400)
+        
+        try:
+            server = Server.objects.get(id=server_id, is_active=True)
+        except Server.DoesNotExist:
+            return JsonResponse({'success': False, 'error': 'Server not found'}, status=404)
+        
+        # Verificar permisos
+        from ..models import UserServerRole
+        user_role = UserServerRole.objects.filter(user=request.user, server=server).first()
+        if not user_role:
+            return JsonResponse({'success': False, 'error': 'No access to this server'}, status=403)
         
         logs_dir = os.path.join(server.minecraft_data_path, 'logs')
         latest_log = os.path.join(logs_dir, 'latest.log')
@@ -442,8 +503,27 @@ def logs_api(request):
 @login_required
 @require_http_methods(["POST"])
 def command_api(request):
-    """Ejecutar comando en el servidor vía RCON"""
+    """Ejecutar comando en el servidor vía RCON - REQUIERE server_id (query param, header X-Server-ID, o body JSON)"""
     try:
+        server_id = _get_server_id_from_request(request)
+        
+        if not server_id:
+            return JsonResponse({
+                'success': False, 
+                'error': 'Server ID required. Send ?server_id=<id>, header X-Server-ID: <id>, or {"server_id": <id>} in body'
+            }, status=400)
+        
+        try:
+            server = Server.objects.get(id=server_id, is_active=True)
+        except Server.DoesNotExist:
+            return JsonResponse({'success': False, 'error': 'Server not found'}, status=404)
+        
+        # Verificar permisos
+        from ..models import UserServerRole
+        user_role = UserServerRole.objects.filter(user=request.user, server=server).first()
+        if not user_role:
+            return JsonResponse({'success': False, 'error': 'No access to this server'}, status=403)
+        
         data = json.loads(request.body)
         command = data.get('command', '').strip()
         
@@ -457,9 +537,9 @@ def command_api(request):
         if command_base not in allowed_commands:
             return JsonResponse({'success': False, 'error': f'Command {command_base} not allowed'})
         
-        rcon = _get_rcon_connection()
+        rcon = _get_rcon_connection(server)
         if rcon is None:
-            return JsonResponse({'success': False, 'error': 'Cannot connect to RCON. Check server configuration.'})
+            return JsonResponse({'success': False, 'error': f'Cannot connect to RCON. Server: {server.name}, Host: {server.host}, Port: {server.rcon_port}'})
         
         try:
             response = rcon.command(command)

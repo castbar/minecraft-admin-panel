@@ -11,6 +11,7 @@ from .models_stats import ServerStatistic, ServerEvent
 from .models_security import IPWhitelist, IPBlacklist, RateLimitRule, SecurityLog
 from .models_community import Ticket, TicketComment, PlayerRanking
 from .models_multi import ServerSession, UserPreference
+from .models_mods import ModConfigTemplate, ServerModConfig
 
 class Server(models.Model):
     """Modelo para servidores Minecraft"""

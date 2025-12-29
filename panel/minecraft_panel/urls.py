@@ -8,7 +8,7 @@ from django.views.static import serve
 from django.http import FileResponse, Http404
 from pathlib import Path
 import os
-from server.views import views, views_api, views_settings, views_backup, views_auth, views_docker, views_pages, views_versions, views_mods
+from server.views import views, views_api, views_settings, views_backup, views_auth, views_docker, views_pages, views_versions, views_mods, views_mods_config
 
 # Ruta al frontend compilado (si existe)
 FRONTEND_DIST = Path(__file__).resolve().parent.parent.parent / 'frontend' / 'dist'
@@ -69,6 +69,19 @@ urlpatterns = [
         path('servers/<int:server_id>/mods/enable/', views_mods.mod_enable, name='mod_enable'),
         path('servers/<int:server_id>/mods/disable/', views_mods.mod_disable, name='mod_disable'),
         path('servers/<int:server_id>/mods/delete/', views_mods.mod_delete, name='mod_delete'),
+        
+        # API de configuraciones de mods (plantillas globales)
+        path('mods/templates/', views_mods_config.mod_templates_list, name='mod_templates_list'),
+        path('mods/templates/<int:template_id>/', views_mods_config.mod_template_detail, name='mod_template_detail'),
+        path('mods/templates/create/', views_mods_config.mod_template_create, name='mod_template_create'),
+        path('mods/templates/<int:template_id>/update/', views_mods_config.mod_template_update, name='mod_template_update'),
+        
+        # API de configuraciones de mods por servidor
+        path('servers/<int:server_id>/mods/configs/', views_mods_config.server_mod_configs_list, name='server_mod_configs_list'),
+        path('servers/<int:server_id>/mods/configs/create/', views_mods_config.server_mod_config_create, name='server_mod_config_create'),
+        path('servers/<int:server_id>/mods/configs/<int:config_id>/', views_mods_config.server_mod_config_detail, name='server_mod_config_detail'),
+        path('servers/<int:server_id>/mods/configs/<int:config_id>/apply/', views_mods_config.server_mod_config_apply, name='server_mod_config_apply'),
+        path('servers/<int:server_id>/mods/configs/apply-all/', views_mods_config.server_mod_configs_apply_all, name='server_mod_configs_apply_all'),
         
         # API nueva (multi-servidor con roles)
         path('servers/', views_api.servers_list, name='servers_list'),

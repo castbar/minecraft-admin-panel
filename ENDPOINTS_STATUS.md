@@ -24,6 +24,23 @@
 - [x] `POST /api/servers/<id>/mods/disable/` - Deshabilitar mod (mueve de mods/ a mods-disabled/) ✅
 - [x] `POST /api/servers/<id>/mods/delete/` - Eliminar mod completamente ✅
 
+## Configuraciones de Mods (Globales)
+**Sistema de plantillas globales para configurar mods de manera centralizada**
+
+- [x] `GET /api/mods/templates/` - Listar plantillas de configuración de mods (requiere staff) ✅
+- [x] `GET /api/mods/templates/<id>/` - Obtener detalles de plantilla (incluye config por defecto) ✅
+- [x] `POST /api/mods/templates/create/` - Crear nueva plantilla (requiere staff) ✅
+- [x] `POST /api/mods/templates/<id>/update/` - Actualizar plantilla (requiere staff) ✅
+
+## Configuraciones de Mods por Servidor
+**Aplicar configuraciones de mods a servidores específicos**
+
+- [x] `GET /api/servers/<id>/mods/configs/` - Listar configuraciones de mods del servidor ✅
+- [x] `GET /api/servers/<id>/mods/configs/<config_id>/` - Obtener detalles de configuración ✅
+- [x] `POST /api/servers/<id>/mods/configs/create/` - Crear/actualizar configuración de mod para servidor ✅
+- [x] `POST /api/servers/<id>/mods/configs/<config_id>/apply/` - Aplicar configuración al servidor (escribir archivo) ✅
+- [x] `POST /api/servers/<id>/mods/configs/apply-all/` - Aplicar todas las configuraciones habilitadas ✅
+
 ## Configuración
 - [x] `GET /api/servers/<id>/settings/` - Obtener configuración del servidor ✅
 - [x] `POST /api/servers/<id>/settings/update/` - Actualizar configuración ✅
@@ -85,8 +102,8 @@
 - [x] `POST /api/command/` - Ejecutar comando (legacy) ✅ (requiere `server_id`)
 
 ## Resumen
-- ✅ Funcionando: 33/33 (100%)
-- ❌ Con problemas: 0/33 (0%)
+- ✅ Funcionando: 43/43 (100%)
+- ❌ Con problemas: 0/43 (0%)
 - Problemas principales: 
   - Ninguno - Todos los endpoints principales funcionan correctamente ✅
   - **Nota**: `POST /api/servers/switch/` tiene problema de CSRF pero no es crítico

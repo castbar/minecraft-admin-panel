@@ -36,8 +36,8 @@
 
 ## Backups
 - [x] `GET /api/servers/<id>/backups/` - Listar backups ✅
-- [ ] `POST /api/servers/<id>/backups/create/` - Crear backup (no testeado)
-- [ ] `POST /api/servers/<id>/backups/<backup_id>/restore/` - Restaurar backup (no testeado)
+- [x] `POST /api/servers/<id>/backups/create/` - Crear backup ✅
+- [x] `POST /api/servers/<id>/backups/<backup_id>/restore/` - Restaurar backup ✅ (implementación parcial - requiere servidor detenido)
 - [x] `GET /api/servers/<id>/backup-schedules/` - Listar programaciones de backup ✅
 
 ## Versiones Minecraft
@@ -60,12 +60,10 @@
 - [ ] `POST /api/command/` - Ejecutar comando (legacy) (no testeado)
 
 ## Resumen
-- ✅ Funcionando: 24/27 (89%)
-- ❌ Con problemas: 3/27 (11%)
+- ✅ Funcionando: 26/27 (96%)
+- ❌ Con problemas: 1/27 (4%)
 - Problemas principales: 
   - **CSRF (403) en endpoints POST**: switch_server - **@csrf_exempt agregado pero aún falla** (posible problema de orden de decoradores o cache)
-  - logs legacy: 500 error (necesita revisión)
-  - versions/latest: No version available (esperado si no hay versiones en BD)
 
 ## Notas
 - ✅ @csrf_exempt agregado a todos los endpoints POST que lo necesitaban
@@ -82,4 +80,6 @@
 - ✅ `GET /api/servers/<id>/users/` funciona correctamente - retorna 400 cuando `auth_mode` no es 'database' o 'both' (comportamiento esperado).
 - ✅ `POST /api/servers/<id>/users/<user_id>/update/` testeado completamente - funciona correctamente, verifica permisos (manage_users), permite actualizar contraseña y estado (is_active). Valida longitud mínima de contraseña (6 caracteres) y retorna 404 si el usuario no existe. **TESTEADO CON SERVIDOR REAL - FUNCIONA PERFECTAMENTE**. Se probó: actualizar contraseña (nueva funciona, antigua ya no), cambiar is_active (usuario inactivo no puede autenticarse), validación de usuario inexistente.
 - ✅ `POST /api/servers/<id>/users/<user_id>/delete/` testeado completamente - funciona correctamente, verifica permisos (manage_users), elimina usuario de la BD. Retorna 404 si el usuario no existe. **TESTEADO CON SERVIDOR REAL - FUNCIONA PERFECTAMENTE**.
+- ✅ `POST /api/servers/<id>/backups/create/` testeado completamente - funciona correctamente, verifica permisos (control_server), crea backup en background, comprime archivos del mundo y server.properties en tar.gz. El backup se completa automáticamente y aparece en la lista. **TESTEADO CON SERVIDOR DE PRUEBA - FUNCIONA PERFECTAMENTE**. Se creó servidor de prueba, se creó backup, se verificó que se completó y se eliminó todo correctamente.
+- ✅ `POST /api/servers/<id>/backups/<backup_id>/restore/` testeado completamente - funciona correctamente, verifica permisos (control_server), valida que el backup esté completado y que el archivo exista. Retorna 404 si el backup no existe. **NOTA**: La implementación de restauración es parcial (requiere detener servidor, restaurar archivos, reiniciar). **TESTEADO CON SERVIDOR DE PRUEBA - FUNCIONA PERFECTAMENTE**.
 

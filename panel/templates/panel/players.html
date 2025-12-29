@@ -1,0 +1,319 @@
+{% extends 'panel/base.html' %}
+
+{% block title %}Jugadores - Minecraft Server Manager{% endblock %}
+
+{% block extra_css %}
+<style>
+    .player-card {
+        transition: transform 0.2s;
+    }
+    .player-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+    .online-badge {
+        animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.5; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <h2 class="mb-4"><i class="bi bi-people"></i> Gestión de Jugadores</h2>
+    
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5><i class="bi bi-person-check"></i> Jugadores Online (Tiempo Real)</h5>
+                    <span class="badge bg-success online-badge" id="online-indicator">●</span>
+                </div>
+                <div class="card-body">
+                    <div id="online-players-list">Cargando...</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5><i class="bi bi-list-check"></i> Whitelist</h5>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <div class="input-group">
+                            <input type="text" class="form-control" id="whitelist-username" placeholder="Nombre de usuario">
+                            <button class="btn btn-primary" onclick="addToWhitelist()">
+                                <i class="bi bi-plus-circle"></i> Agregar
+                            </button>
+                        </div>
+                    </div>
+                    <div id="whitelist-list">Cargando...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5><i class="bi bi-database"></i> Usuarios con Contraseña (Base de Datos)</h5>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <button class="btn btn-success" onclick="showCreateUserModal()">
+                            <i class="bi bi-person-plus"></i> Crear Usuario
+                        </button>
+                    </div>
+                    <div id="db-users-list">Cargando...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal para crear usuario -->
+<div class="modal fade" id="createUserModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Crear Usuario</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label">Nombre de usuario</label>
+                    <input type="text" class="form-control" id="new-username" placeholder="username">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Contraseña</label>
+                    <input type="password" class="form-control" id="new-password" placeholder="password">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary" onclick="createUser()">Crear</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    function loadOnlinePlayers() {
+        if (!serverId) return;
+        
+        fetch(`/api/servers/${serverId}/status/`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    const list = document.getElementById('online-players-list');
+                    if (data.data.players && data.data.players.length > 0) {
+                        list.innerHTML = '<div class="row">' + 
+                            data.data.players.map(player => 
+                                `<div class="col-md-4 mb-3">
+                                    <div class="card player-card">
+                                        <div class="card-body">
+                                            <h6><i class="bi bi-person-circle text-success"></i> ${player}</h6>
+                                            <small class="text-muted">Online ahora</small>
+                                        </div>
+                                    </div>
+                                </div>`
+                            ).join('') + '</div>';
+                    } else {
+                        list.innerHTML = '<p class="text-muted">No hay jugadores online</p>';
+                    }
+                }
+            })
+            .catch(error => {
+                console.error('Error cargando jugadores:', error);
+            });
+    }
+    
+    function loadWhitelist() {
+        if (!serverId) return;
+        
+        fetch(`/api/servers/${serverId}/whitelist/`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    const list = document.getElementById('whitelist-list');
+                    if (data.data && data.data.length > 0) {
+                        list.innerHTML = '<ul class="list-group">' + 
+                            data.data.map(user => {
+                                const username = typeof user === 'string' ? user : (user.name || user.username || 'Unknown');
+                                return `<li class="list-group-item d-flex justify-content-between align-items-center">
+                                    ${username}
+                                    <button class="btn btn-sm btn-danger" onclick="removeFromWhitelist('${username}')">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </li>`;
+                            }).join('') + '</ul>';
+                    } else {
+                        list.innerHTML = '<p class="text-muted">No hay usuarios en la whitelist</p>';
+                    }
+                }
+            })
+            .catch(error => {
+                document.getElementById('whitelist-list').innerHTML = '<p class="text-danger">Error: ' + error + '</p>';
+            });
+    }
+    
+    function loadDBUsers() {
+        if (!serverId) return;
+        
+        fetch(`/api/servers/${serverId}/users/`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    const list = document.getElementById('db-users-list');
+                    if (data.data && data.data.length > 0) {
+                        list.innerHTML = '<div class="table-responsive"><table class="table table-hover"><thead><tr><th>Usuario</th><th>Última Conexión</th><th>Estado</th><th>Acciones</th></tr></thead><tbody>' + 
+                            data.data.map(user => 
+                                `<tr>
+                                    <td>${user.username}</td>
+                                    <td>${user.last_login ? new Date(user.last_login).toLocaleString('es-ES') : 'Nunca'}</td>
+                                    <td><span class="badge ${user.is_active ? 'bg-success' : 'bg-secondary'}">${user.is_active ? 'Activo' : 'Inactivo'}</span></td>
+                                    <td>
+                                        <button class="btn btn-sm btn-danger" onclick="deleteDBUser(${user.id})">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </td>
+                                </tr>`
+                            ).join('') + '</tbody></table></div>';
+                    } else {
+                        list.innerHTML = '<p class="text-muted">No hay usuarios en la base de datos</p>';
+                    }
+                }
+            })
+            .catch(error => {
+                document.getElementById('db-users-list').innerHTML = '<p class="text-danger">Error: ' + error + '</p>';
+            });
+    }
+    
+    function addToWhitelist() {
+        const username = document.getElementById('whitelist-username').value.trim();
+        if (!username) {
+            alert('Por favor ingresa un nombre de usuario');
+            return;
+        }
+        
+        fetch(`/api/servers/${serverId}/whitelist/add/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCookie('csrftoken')
+            },
+            body: JSON.stringify({ username: username })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('Usuario agregado exitosamente');
+                document.getElementById('whitelist-username').value = '';
+                loadWhitelist();
+            } else {
+                alert('Error: ' + (data.error || 'Error desconocido'));
+            }
+        })
+        .catch(error => {
+            alert('Error de conexión: ' + error);
+        });
+    }
+    
+    function removeFromWhitelist(username) {
+        if (!confirm(`¿Eliminar ${username} de la whitelist?`)) return;
+        
+        fetch(`/api/servers/${serverId}/whitelist/remove/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCookie('csrftoken')
+            },
+            body: JSON.stringify({ username: username })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                loadWhitelist();
+            } else {
+                alert('Error: ' + (data.error || 'Error desconocido'));
+            }
+        });
+    }
+    
+    function showCreateUserModal() {
+        const modal = new bootstrap.Modal(document.getElementById('createUserModal'));
+        modal.show();
+    }
+    
+    function createUser() {
+        const username = document.getElementById('new-username').value.trim();
+        const password = document.getElementById('new-password').value.trim();
+        
+        if (!username || !password) {
+            alert('Por favor completa todos los campos');
+            return;
+        }
+        
+        fetch(`/api/servers/${serverId}/users/create/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCookie('csrftoken')
+            },
+            body: JSON.stringify({ username: username, password: password })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('Usuario creado exitosamente');
+                bootstrap.Modal.getInstance(document.getElementById('createUserModal')).hide();
+                document.getElementById('new-username').value = '';
+                document.getElementById('new-password').value = '';
+                loadDBUsers();
+            } else {
+                alert('Error: ' + (data.error || 'Error desconocido'));
+            }
+        })
+        .catch(error => {
+            alert('Error de conexión: ' + error);
+        });
+    }
+    
+    function deleteDBUser(userId) {
+        if (!confirm('¿Eliminar este usuario?')) return;
+        
+        fetch(`/api/servers/${serverId}/users/${userId}/delete/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCookie('csrftoken')
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                loadDBUsers();
+            } else {
+                alert('Error: ' + (data.error || 'Error desconocido'));
+            }
+        });
+    }
+    
+    if (serverId) {
+        loadOnlinePlayers();
+        loadWhitelist();
+        loadDBUsers();
+        // Actualizar jugadores online cada 2 segundos
+        setInterval(loadOnlinePlayers, 2000);
+        // Actualizar whitelist cada 10 segundos
+        setInterval(loadWhitelist, 10000);
+    }
+</script>
+{% endblock %}

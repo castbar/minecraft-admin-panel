@@ -1,0 +1,47 @@
+version: '3.8'
+
+# ============================================
+# Minecraft Admin Panel
+# Panel de administración para servidores Minecraft
+# Red aislada: minecraft-admin
+# Puerto: 8000 (Panel Django)
+# ============================================
+
+networks:
+  minecraft-admin:
+    external: true
+    name: minecraft-admin
+
+services:
+  # Panel Django de Administración (Backend API)
+  minecraft-admin-panel:
+    # Para usar registry, comenta 'build' y descomenta 'image':
+    # image: ${DOCKER_REGISTRY:-registry.example.com}/${DOCKER_NAMESPACE:-your-namespace}/minecraft-admin-panel:lts
+    build:
+      context: ./panel
+      dockerfile: Dockerfile
+    container_name: minecraft-admin-panel
+    networks:
+      - minecraft-admin
+    ports:
+      - "0.0.0.0:8000:8000"
+    environment:
+      - RCON_HOST=${RCON_HOST:-localhost}
+      - RCON_PORT=${RCON_PORT:-25575}
+      - RCON_PASSWORD=${RCON_PASSWORD:-change-me}
+      - MINECRAFT_DATA_PATH=/data
+      - DEBUG=False
+      - DJANGO_SECRET_KEY=${DJANGO_SECRET_KEY:-change-me-in-production-12345}
+    volumes:
+      - minecraft_data:/data
+      - panel_static:/app/staticfiles
+      - /var/run/docker.sock:/var/run/docker.sock
+    restart: unless-stopped
+    # El entrypoint.sh maneja la inicialización
+
+volumes:
+  minecraft_data:
+    driver: local
+  panel_static:
+    driver: local
+

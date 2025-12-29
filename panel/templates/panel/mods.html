@@ -1,0 +1,154 @@
+{% extends 'panel/base.html' %}
+
+{% block title %}Mods - Minecraft Server Manager{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <h2 class="mb-4"><i class="bi bi-box"></i> Mods</h2>
+    
+    <div class="row">
+        <div class="col-md-8">
+            <div class="card mb-4">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5>Mods Instalados</h5>
+                    <button class="btn btn-primary btn-sm" onclick="document.getElementById('mod-upload-input').click()">
+                        <i class="bi bi-upload"></i> Subir Mod
+                    </button>
+                </div>
+                <div class="card-body">
+                    <input type="file" id="mod-upload-input" accept=".jar" style="display: none;" onchange="uploadMod(event)">
+                    <div id="mods-list">Cargando mods...</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5>Información</h5>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted">
+                        <small>
+                            Puedes subir archivos .jar de mods para Minecraft.<br>
+                            Tamaño máximo: 200MB<br>
+                            Los mods se instalarán en el servidor automáticamente.
+                        </small>
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    function loadMods() {
+        if (!serverId) return;
+        
+        fetch(`/api/mods/?server_id=${serverId}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    const list = document.getElementById('mods-list');
+                    if (data.data && data.data.length > 0) {
+                        list.innerHTML = '<div class="table-responsive"><table class="table table-hover"><thead><tr><th>Nombre</th><th>Tamaño</th><th>Acciones</th></tr></thead><tbody>' + 
+                            data.data.map(mod => 
+                                `<tr>
+                                    <td><i class="bi bi-file-earmark-zip"></i> ${mod.name}</td>
+                                    <td><span class="badge bg-secondary">${mod.size_mb} MB</span></td>
+                                    <td>
+                                        <button class="btn btn-sm btn-danger" onclick="deleteMod('${mod.name}')" title="Eliminar">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </td>
+                                </tr>`
+                            ).join('') + '</tbody></table></div>';
+                    } else {
+                        list.innerHTML = '<p class="text-muted">No hay mods instalados</p>';
+                    }
+                } else {
+                    list.innerHTML = '<p class="text-danger">Error: ' + (data.error || 'Error desconocido') + '</p>';
+                }
+            })
+            .catch(error => {
+                document.getElementById('mods-list').innerHTML = '<p class="text-danger">Error al cargar mods: ' + error + '</p>';
+            });
+    }
+    
+    function uploadMod(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        
+        if (!file.name.endsWith('.jar')) {
+            alert('Solo se permiten archivos .jar');
+            return;
+        }
+        
+        if (file.size > 200 * 1024 * 1024) {
+            alert('El archivo es demasiado grande (máximo 200MB)');
+            return;
+        }
+        
+        const formData = new FormData();
+        formData.append('mod_file', file);
+        
+        const list = document.getElementById('mods-list');
+        list.innerHTML = '<div class="text-center"><div class="spinner-border" role="status"></div><p>Subiendo mod...</p></div>';
+        
+        fetch(`/api/mods/upload/?server_id=${serverId}`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': getCookie('csrftoken')
+            },
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('Mod subido exitosamente. El servidor debe reiniciarse para aplicar los cambios.');
+                loadMods();
+            } else {
+                alert('Error: ' + (data.error || 'Error desconocido'));
+                loadMods();
+            }
+        })
+        .catch(error => {
+            alert('Error de conexión: ' + error);
+            loadMods();
+        });
+        
+        // Reset input
+        event.target.value = '';
+    }
+    
+    function deleteMod(modName) {
+        if (!confirm(`¿Eliminar el mod "${modName}"?\n\nEl servidor debe reiniciarse para aplicar los cambios.`)) return;
+        
+        fetch(`/api/mods/delete/?server_id=${serverId}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCookie('csrftoken')
+            },
+            body: JSON.stringify({ mod_name: modName })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('Mod eliminado exitosamente. El servidor debe reiniciarse para aplicar los cambios.');
+                loadMods();
+            } else {
+                alert('Error: ' + (data.error || 'Error desconocido'));
+            }
+        })
+        .catch(error => {
+            alert('Error de conexión: ' + error);
+        });
+    }
+    
+    if (serverId) {
+        loadMods();
+    }
+</script>
+{% endblock %}

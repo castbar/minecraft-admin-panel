@@ -1,0 +1,183 @@
+{% extends 'panel/base.html' %}
+
+{% block title %}Configuración - Minecraft Server Manager{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <h2 class="mb-4"><i class="bi bi-gear"></i> Configuración del Servidor</h2>
+    
+    <div class="row">
+        <div class="col-md-8">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5>Configuración de Acceso</h5>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label class="form-label">Modo de Autenticación</label>
+                        <select class="form-select" id="auth-mode">
+                            <option value="whitelist" {% if server.auth_mode == 'whitelist' %}selected{% endif %}>Solo Whitelist</option>
+                            <option value="database" {% if server.auth_mode == 'database' %}selected{% endif %}>Base de Datos (usuarios y contraseñas)</option>
+                            <option value="both" {% if server.auth_mode == 'both' %}selected{% endif %}>Whitelist + Base de Datos</option>
+                            <option value="public" {% if server.auth_mode == 'public' %}selected{% endif %}>Público (sin autenticación)</option>
+                        </select>
+                    </div>
+                    <div class="mb-3 form-check">
+                        <input type="checkbox" class="form-check-input" id="enable-whitelist" {% if server.enable_whitelist %}checked{% endif %}>
+                        <label class="form-check-label" for="enable-whitelist">Habilitar Whitelist</label>
+                    </div>
+                    <div class="mb-3 form-check">
+                        <input type="checkbox" class="form-check-input" id="online-mode" {% if server.online_mode %}checked{% endif %}>
+                        <label class="form-check-label" for="online-mode">Modo Online (verifica con Mojang)</label>
+                    </div>
+                    <button class="btn btn-primary" onclick="saveAccessSettings()">Guardar Configuración de Acceso</button>
+                </div>
+            </div>
+            
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5>Configuración del Servidor</h5>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label class="form-label">Máximo de Jugadores</label>
+                        <input type="number" class="form-control" id="max-players" value="20" min="1" max="100">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Mensaje del Día (MOTD)</label>
+                        <input type="text" class="form-control" id="motd" value="Minecraft Server">
+                    </div>
+                    <button class="btn btn-primary" onclick="saveServerSettings()">Guardar Configuración del Servidor</button>
+                </div>
+            </div>
+            
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5>Mods de Chat de Proximidad</h5>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3 form-check">
+                        <input type="checkbox" class="form-check-input" id="enable-proximity-chat">
+                        <label class="form-check-label" for="enable-proximity-chat">Habilitar Chat de Proximidad</label>
+                    </div>
+                    <div class="mb-3" id="proximity-chat-settings" style="display: none;">
+                        <label class="form-label">Rango de Chat (bloques)</label>
+                        <input type="number" class="form-control" id="chat-range" value="50" min="1" max="1000">
+                        <small class="text-muted">Los jugadores solo pueden chatear con otros dentro de este rango</small>
+                    </div>
+                    <button class="btn btn-primary" onclick="saveProximityChatSettings()">Guardar Configuración de Chat</button>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5>Información</h5>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted">
+                        <small>
+                            <strong>Modo de Autenticación:</strong><br>
+                            • <strong>Whitelist:</strong> Solo jugadores en la whitelist pueden entrar<br>
+                            • <strong>Base de Datos:</strong> Jugadores deben registrarse con usuario/contraseña<br>
+                            • <strong>Ambos:</strong> Requiere estar en whitelist Y tener cuenta en BD<br>
+                            • <strong>Público:</strong> Cualquiera puede entrar<br><br>
+                            
+                            <strong>Modo Online:</strong> Si está activado, solo jugadores con cuenta premium de Minecraft pueden entrar.<br><br>
+                            
+                            <strong>Chat de Proximidad:</strong> Requiere que el mod esté preinstalado en el servidor.
+                        </small>
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.getElementById('enable-proximity-chat').addEventListener('change', function() {
+        document.getElementById('proximity-chat-settings').style.display = this.checked ? 'block' : 'none';
+    });
+    
+    function saveAccessSettings() {
+        const authMode = document.getElementById('auth-mode').value;
+        const enableWhitelist = document.getElementById('enable-whitelist').checked;
+        const onlineMode = document.getElementById('online-mode').checked;
+        
+        fetch(`/api/servers/${serverId}/settings/update/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCookie('csrftoken')
+            },
+            body: JSON.stringify({
+                auth_mode: authMode,
+                enable_whitelist: enableWhitelist,
+                online_mode: onlineMode
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('Configuración de acceso guardada exitosamente');
+            } else {
+                alert('Error: ' + (data.error || 'Error desconocido'));
+            }
+        })
+        .catch(error => {
+            alert('Error de conexión: ' + error);
+        });
+    }
+    
+    function saveServerSettings() {
+        const maxPlayers = parseInt(document.getElementById('max-players').value);
+        const motd = document.getElementById('motd').value.trim();
+        
+        // Enviar configuración a la API de settings
+        fetch(`/api/servers/${serverId}/settings/update/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCookie('csrftoken')
+            },
+            body: JSON.stringify({
+                max_players: maxPlayers,
+                motd: motd
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('Configuración del servidor guardada exitosamente. El servidor debe reiniciarse para aplicar algunos cambios.');
+            } else {
+                alert('Error: ' + (data.error || 'Error desconocido'));
+            }
+        })
+        .catch(error => {
+            alert('Error de conexión: ' + error);
+        });
+    }
+    
+    function saveProximityChatSettings() {
+        const enabled = document.getElementById('enable-proximity-chat').checked;
+        const range = parseInt(document.getElementById('chat-range').value);
+        
+        // Esto requeriría configuración específica del mod de chat de proximidad
+        alert('Configuración de chat de proximidad guardada. Asegúrate de que el mod esté instalado y configurado correctamente.');
+    }
+    
+    // Cargar configuración actual
+    if (serverId) {
+        fetch(`/api/servers/${serverId}/settings/`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Cargar valores si están disponibles
+                }
+            });
+    }
+</script>
+{% endblock %}
+

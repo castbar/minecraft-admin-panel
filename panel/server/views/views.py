@@ -189,7 +189,7 @@ def whitelist_api(request):
 @login_required
 @require_http_methods(["POST"])
 def whitelist_action(request, action):
-    """Agregar o eliminar usuario de whitelist - REQUIERE server_id (query param, header X-Server-ID, o body JSON)"""
+    """Agregar o eliminar usuario de whitelist - Requiere header X-Server-ID"""
     from .models import Server
     
     try:
@@ -198,7 +198,7 @@ def whitelist_action(request, action):
         if not server_id:
             return JsonResponse({
                 'success': False, 
-                'error': 'Server ID required. Send ?server_id=<id>, header X-Server-ID: <id>, or {"server_id": <id>} in body'
+                'error': 'Server ID required. Send header X-Server-ID: <id>'
             }, status=400)
         
         try:
@@ -242,54 +242,20 @@ def whitelist_action(request, action):
     except Exception as e:
         return JsonResponse({'success': False, 'error': f'RCON error: {str(e)}'})
 
-def _get_server_id_from_request(request):
-    """
-    Obtener server_id de la request en este orden:
-    1. Query parameter: ?server_id=<id>
-    2. Header: X-Server-ID
-    3. Body JSON (POST): {"server_id": <id>}
-    
-    Returns: server_id (int) or None
-    """
-    # 1. Query parameter
-    server_id = request.GET.get('server_id')
-    if server_id:
-        try:
-            return int(server_id)
-        except (ValueError, TypeError):
-            pass
-    
-    # 2. Header
-    server_id = request.headers.get('X-Server-ID')
-    if server_id:
-        try:
-            return int(server_id)
-        except (ValueError, TypeError):
-            pass
-    
-    # 3. Body JSON (solo para POST/PUT/PATCH)
-    if request.method in ['POST', 'PUT', 'PATCH'] and request.body:
-        try:
-            data = json.loads(request.body)
-            server_id = data.get('server_id')
-            if server_id:
-                return int(server_id)
-        except (json.JSONDecodeError, ValueError, TypeError):
-            pass
-    
-    return None
+# Importar helper común desde utils
+from ..utils.permissions import _get_server_id_from_request
 
 @login_required
 @require_http_methods(["GET"])
 def mods_api(request):
-    """Obtener lista de mods instalados - REQUIERE server_id (query param o header X-Server-ID)"""
+    """Obtener lista de mods instalados - Requiere header X-Server-ID"""
     try:
         server_id = _get_server_id_from_request(request)
         
         if not server_id:
             return JsonResponse({
                 'success': False, 
-                'error': 'Server ID required. Send ?server_id=<id> or header X-Server-ID: <id>'
+                'error': 'Server ID required. Send header X-Server-ID: <id>'
             }, status=400)
         
         try:
@@ -322,14 +288,14 @@ def mods_api(request):
 @login_required
 @require_http_methods(["POST"])
 def mods_action(request, action):
-    """Agregar o eliminar mod - REQUIERE server_id (query param, header X-Server-ID, o body JSON)"""
+    """Agregar o eliminar mod - Requiere header X-Server-ID"""
     try:
         server_id = _get_server_id_from_request(request)
         
         if not server_id:
             return JsonResponse({
                 'success': False, 
-                'error': 'Server ID required. Send ?server_id=<id>, header X-Server-ID: <id>, or {"server_id": <id>} in body'
+                'error': 'Server ID required. Send header X-Server-ID: <id>'
             }, status=400)
         
         try:
@@ -391,14 +357,14 @@ def mods_action(request, action):
 @login_required
 @require_http_methods(["GET"])
 def players_api(request):
-    """Obtener lista de jugadores online - REQUIERE server_id (query param o header X-Server-ID)"""
+    """Obtener lista de jugadores online - Requiere header X-Server-ID"""
     try:
         server_id = _get_server_id_from_request(request)
         
         if not server_id:
             return JsonResponse({
                 'success': False, 
-                'error': 'Server ID required. Send ?server_id=<id> or header X-Server-ID: <id>'
+                'error': 'Server ID required. Send header X-Server-ID: <id>'
             }, status=400)
         
         try:
@@ -438,7 +404,7 @@ def players_api(request):
 @login_required
 @require_http_methods(["GET"])
 def logs_api(request):
-    """Obtener logs recientes del servidor - REQUIERE server_id (query param o header X-Server-ID)"""
+    """Obtener logs recientes del servidor - Requiere header X-Server-ID"""
     from .models import Server  # Import Server here to avoid circular imports
     
     try:
@@ -447,7 +413,7 @@ def logs_api(request):
         if not server_id:
             return JsonResponse({
                 'success': False, 
-                'error': 'Server ID required. Send ?server_id=<id> or header X-Server-ID: <id>'
+                'error': 'Server ID required. Send header X-Server-ID: <id>'
             }, status=400)
         
         try:
@@ -503,14 +469,14 @@ def logs_api(request):
 @login_required
 @require_http_methods(["POST"])
 def command_api(request):
-    """Ejecutar comando en el servidor vía RCON - REQUIERE server_id (query param, header X-Server-ID, o body JSON)"""
+    """Ejecutar comando en el servidor vía RCON - Requiere header X-Server-ID"""
     try:
         server_id = _get_server_id_from_request(request)
         
         if not server_id:
             return JsonResponse({
                 'success': False, 
-                'error': 'Server ID required. Send ?server_id=<id>, header X-Server-ID: <id>, or {"server_id": <id>} in body'
+                'error': 'Server ID required. Send header X-Server-ID: <id>'
             }, status=400)
         
         try:

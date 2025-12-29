@@ -114,9 +114,17 @@ def _is_local_network(ip):
 
 @login_required
 @require_http_methods(["GET"])
-def server_status(request, server_id):
-    """Obtener estado del servidor"""
-    server, error_response = _check_server_permission(request, server_id, 'view')
+def server_status(request, server_id=None):
+    """Obtener estado del servidor - Requiere header X-Server-ID"""
+    # Obtener server_id del header (método principal) o de la URL (compatibilidad)
+    resolved_server_id = _get_server_id_from_request(request) or server_id
+    if not resolved_server_id:
+        return JsonResponse({
+            'success': False, 
+            'error': 'Server ID required. Send header X-Server-ID: <id>'
+        }, status=400)
+    
+    server, error_response = _check_server_permission(request, resolved_server_id, 'view')
     if error_response:
         return error_response
     
@@ -197,11 +205,19 @@ def server_status(request, server_id):
 
 @login_required
 @require_http_methods(["GET"])
-def server_stats(request, server_id):
-    """Obtener estadísticas históricas del servidor para gráficos"""
+def server_stats(request, server_id=None):
+    """Obtener estadísticas históricas del servidor para gráficos - Requiere header X-Server-ID"""
     from ..models.models_stats import ServerStatistic
     
-    server, error_response = _check_server_permission(request, server_id, 'view')
+    # Obtener server_id del header (método principal) o de la URL (compatibilidad)
+    resolved_server_id = _get_server_id_from_request(request) or server_id
+    if not resolved_server_id:
+        return JsonResponse({
+            'success': False, 
+            'error': 'Server ID required. Send header X-Server-ID: <id>'
+        }, status=400)
+    
+    server, error_response = _check_server_permission(request, resolved_server_id, 'view')
     if error_response:
         return error_response
     
@@ -245,9 +261,31 @@ def _check_server_permission(request, server_id, permission_needed):
 @csrf_exempt
 @login_required
 @require_http_methods(["POST"])
-def server_control(request, server_id, action):
-    """Controlar servidor: start, stop, restart, pause, unpause"""
-    server, error_response = _check_server_permission(request, server_id, 'control_server')
+def server_control(request, server_id=None, action=None):
+    """Controlar servidor: start, stop, restart, pause, unpause - Requiere header X-Server-ID"""
+    # Obtener server_id del header (método principal) o de la URL (compatibilidad)
+    resolved_server_id = _get_server_id_from_request(request) or server_id
+    if not resolved_server_id:
+        return JsonResponse({
+            'success': False, 
+            'error': 'Server ID required. Send header X-Server-ID: <id>'
+        }, status=400)
+    
+    # Obtener action de la URL o del body
+    if not action:
+        try:
+            data = json.loads(request.body)
+            action = data.get('action')
+        except (json.JSONDecodeError, AttributeError):
+            pass
+    
+    if not action:
+        return JsonResponse({
+            'success': False, 
+            'error': 'Action required (start, stop, restart, pause, unpause)'
+        }, status=400)
+    
+    server, error_response = _check_server_permission(request, resolved_server_id, 'control_server')
     if error_response:
         return error_response
     
@@ -282,13 +320,21 @@ def server_control(request, server_id, action):
 @csrf_exempt
 @login_required
 @require_http_methods(["POST"])
-def whitelist_add(request, server_id):
-    """Agregar usuario a whitelist"""
+def whitelist_add(request, server_id=None):
+    """Agregar usuario a whitelist - Requiere header X-Server-ID"""
     from django.shortcuts import get_object_or_404
+    
+    # Obtener server_id del header (método principal) o de la URL (compatibilidad)
+    resolved_server_id = _get_server_id_from_request(request) or server_id
+    if not resolved_server_id:
+        return JsonResponse({
+            'success': False, 
+            'error': 'Server ID required. Send header X-Server-ID: <id>'
+        }, status=400)
     
     # Obtener servidor y verificar permisos
     try:
-        server = get_object_or_404(Server, id=server_id, is_active=True)
+        server = get_object_or_404(Server, id=resolved_server_id, is_active=True)
     except:
         return JsonResponse({'success': False, 'error': 'Server not found'}, status=404)
     
@@ -332,13 +378,21 @@ def whitelist_add(request, server_id):
 @csrf_exempt
 @login_required
 @require_http_methods(["POST"])
-def whitelist_remove(request, server_id):
-    """Eliminar usuario de whitelist"""
+def whitelist_remove(request, server_id=None):
+    """Eliminar usuario de whitelist - Requiere header X-Server-ID"""
     from django.shortcuts import get_object_or_404
+    
+    # Obtener server_id del header (método principal) o de la URL (compatibilidad)
+    resolved_server_id = _get_server_id_from_request(request) or server_id
+    if not resolved_server_id:
+        return JsonResponse({
+            'success': False, 
+            'error': 'Server ID required. Send header X-Server-ID: <id>'
+        }, status=400)
     
     # Obtener servidor y verificar permisos
     try:
-        server = get_object_or_404(Server, id=server_id, is_active=True)
+        server = get_object_or_404(Server, id=resolved_server_id, is_active=True)
     except:
         return JsonResponse({'success': False, 'error': 'Server not found'}, status=404)
     
@@ -381,12 +435,20 @@ def whitelist_remove(request, server_id):
 
 @login_required
 @require_http_methods(["GET"])
-def whitelist_list(request, server_id):
-    """Listar usuarios en whitelist"""
+def whitelist_list(request, server_id=None):
+    """Listar usuarios en whitelist - Requiere header X-Server-ID"""
     from django.shortcuts import get_object_or_404
     
+    # Obtener server_id del header (método principal) o de la URL (compatibilidad)
+    resolved_server_id = _get_server_id_from_request(request) or server_id
+    if not resolved_server_id:
+        return JsonResponse({
+            'success': False, 
+            'error': 'Server ID required. Send header X-Server-ID: <id>'
+        }, status=400)
+    
     # Obtener servidor y verificar permisos
-    server = get_object_or_404(Server, id=server_id, is_active=True)
+    server = get_object_or_404(Server, id=resolved_server_id, is_active=True)
     user_role = UserServerRole.objects.filter(
         user=request.user,
         server=server
@@ -437,49 +499,8 @@ def whitelist_list(request, server_id):
     except Exception as e:
         return JsonResponse({'success': False, 'error': str(e)}, status=500)
 
-def _get_server_id_from_request(request):
-    """
-    Obtener server_id de la request en este orden:
-    1. URL parameter (path): /api/servers/<id>/... (ya extraído por Django)
-    2. Query parameter: ?server_id=<id>
-    3. Header: X-Server-ID
-    4. Body JSON (POST): {"server_id": <id>}
-    
-    Returns: server_id (int) or None
-    """
-    # 1. De la URL (si está en el path, Django lo pone en kwargs)
-    if hasattr(request, 'resolver_match') and request.resolver_match:
-        server_id = request.resolver_match.kwargs.get('server_id')
-        if server_id:
-            return int(server_id)
-    
-    # 2. Query parameter
-    server_id = request.GET.get('server_id')
-    if server_id:
-        try:
-            return int(server_id)
-        except (ValueError, TypeError):
-            pass
-    
-    # 3. Header
-    server_id = request.headers.get('X-Server-ID')
-    if server_id:
-        try:
-            return int(server_id)
-        except (ValueError, TypeError):
-            pass
-    
-    # 4. Body JSON (solo para POST/PUT/PATCH)
-    if request.method in ['POST', 'PUT', 'PATCH'] and request.body:
-        try:
-            data = json.loads(request.body)
-            server_id = data.get('server_id')
-            if server_id:
-                return int(server_id)
-        except (json.JSONDecodeError, ValueError, TypeError):
-            pass
-    
-    return None
+# Importar helper común desde utils
+from ..utils.permissions import _get_server_id_from_request
 
 @csrf_exempt
 @login_required

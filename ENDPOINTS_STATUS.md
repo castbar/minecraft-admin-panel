@@ -46,13 +46,15 @@
 - [x] `POST /api/minecraft/versions/create/` - Crear nueva versión ✅
 
 ## Multi-servidor
-**IMPORTANTE:** El cliente SIEMPRE debe enviar `server_id` en cada request. El servidor NO mantiene estado del cliente.
+**IMPORTANTE:** TODOS los endpoints que requieren `server_id` usan el mismo método: **Header HTTP `X-Server-ID`**.
 
-**Formas de enviar `server_id`:**
-1. **En la URL (recomendado)**: `/api/servers/<server_id>/status/`
-2. **Query parameter**: `?server_id=<id>`
-3. **Header HTTP**: `X-Server-ID: <id>`
-4. **Body JSON (POST)**: `{"server_id": <id>, ...}`
+**Método principal (OBLIGATORIO):**
+- **Header HTTP**: `X-Server-ID: <id>`
+
+**Métodos de compatibilidad (opcionales):**
+- URL parameter: `/api/servers/<id>/...` (solo para endpoints con server_id en la URL)
+- Query parameter: `?server_id=<id>`
+- Body JSON (POST): `{"server_id": <id>, ...}`
 
 **Endpoints que NO necesitan server_id:**
 - `GET /api/servers/` - Lista todos los servidores

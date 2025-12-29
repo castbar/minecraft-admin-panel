@@ -8,7 +8,7 @@ from django.views.static import serve
 from django.http import FileResponse, Http404
 from pathlib import Path
 import os
-from server.views import views, views_api, views_settings, views_backup, views_auth, views_docker, views_pages, views_versions, views_mods, views_mods_config
+from server.views import views, views_api, views_settings, views_backup, views_auth, views_docker, views_pages, views_versions, views_mods, views_mods_config, views_mods_config_simple, views_mods_pool
 
 # Ruta al frontend compilado (si existe)
 FRONTEND_DIST = Path(__file__).resolve().parent.parent.parent / 'frontend' / 'dist'
@@ -70,6 +70,11 @@ urlpatterns = [
         path('servers/<int:server_id>/mods/disable/', views_mods.mod_disable, name='mod_disable'),
         path('servers/<int:server_id>/mods/delete/', views_mods.mod_delete, name='mod_delete'),
         
+        # API de configuración de mods (simplificada - desde gestión de mods)
+        path('servers/<int:server_id>/mods/config/', views_mods_config_simple.mod_config_get, name='mod_config_get'),
+        path('servers/<int:server_id>/mods/config/update/', views_mods_config_simple.mod_config_update, name='mod_config_update'),
+        path('servers/<int:server_id>/mods/config/reset/', views_mods_config_simple.mod_config_reset, name='mod_config_reset'),
+        
         # API de configuraciones de mods (plantillas globales)
         path('mods/templates/', views_mods_config.mod_templates_list, name='mod_templates_list'),
         path('mods/templates/<int:template_id>/', views_mods_config.mod_template_detail, name='mod_template_detail'),
@@ -115,6 +120,12 @@ urlpatterns = [
         path('minecraft/versions/', views_versions.available_versions, name='available_versions'),
         path('minecraft/versions/latest/', views_versions.latest_version, name='latest_version'),
         path('minecraft/versions/create/', views_versions.create_version, name='create_version'),
+        
+        # Pool de mods precargados
+        path('mods/pool/', views_mods_pool.mods_pool_list, name='mods_pool_list'),
+        path('mods/pool/categories/', views_mods_pool.mods_pool_categories, name='mods_pool_categories'),
+        path('mods/pool/<int:mod_id>/', views_mods_pool.mods_pool_detail, name='mods_pool_detail'),
+        path('mods/pool/create/', views_mods_pool.mods_pool_create, name='mods_pool_create'),
     ])),
     
     # Rutas legacy para compatibilidad (templates Django)

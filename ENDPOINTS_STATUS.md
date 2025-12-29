@@ -18,11 +18,26 @@
 - [x] `POST /api/servers/<id>/whitelist/remove/` - Eliminar usuario de whitelist ✅
 
 ## Mods
-- [x] `GET /api/servers/<id>/mods/` - Listar mods (muestra habilitados y deshabilitados) ✅
-- [x] `POST /api/servers/<id>/mods/upload/` - Subir nuevo mod ✅
+- [x] `GET /api/servers/<id>/mods/` - Listar mods/plugins instalados (muestra info del pool si existe, incluye has_config) ✅
+- [x] `POST /api/servers/<id>/mods/upload/` - Subir nuevo mod/plugin ✅
 - [x] `POST /api/servers/<id>/mods/enable/` - Habilitar mod (mueve de mods-disabled/ a mods/) ✅
 - [x] `POST /api/servers/<id>/mods/disable/` - Deshabilitar mod (mueve de mods/ a mods-disabled/) ✅
 - [x] `POST /api/servers/<id>/mods/delete/` - Eliminar mod completamente ✅
+
+## Configuración de Mods (Simplificada)
+**Configuración integrada en la gestión de mods - cada mod puede tener su configuración**
+
+- [x] `GET /api/servers/<id>/mods/config/` - Obtener configuración de un mod (query param: mod_name) ✅
+- [x] `POST /api/servers/<id>/mods/config/update/` - Actualizar configuración de un mod ✅
+- [x] `POST /api/servers/<id>/mods/config/reset/` - Resetear configuración a valores por defecto ✅
+
+## Pool de Mods Precargados
+**Mods/plugins más usados con información de compatibilidad**
+
+- [x] `GET /api/mods/pool/` - Listar mods/plugins del pool (filtro: server_type, category, is_popular, is_recommended) ✅
+- [x] `GET /api/mods/pool/categories/` - Listar categorías disponibles ✅
+- [x] `GET /api/mods/pool/<id>/` - Detalles de un mod/plugin del pool ✅
+- [x] `POST /api/mods/pool/create/` - Agregar mod/plugin al pool (requiere staff) ✅
 
 ## Configuraciones de Mods (Globales)
 **Sistema de plantillas globales para configurar mods de manera centralizada**
@@ -102,8 +117,8 @@
 - [x] `POST /api/command/` - Ejecutar comando (legacy) ✅ (requiere `server_id`)
 
 ## Resumen
-- ✅ Funcionando: 43/43 (100%)
-- ❌ Con problemas: 0/43 (0%)
+- ✅ Funcionando: 52/52 (100%)
+- ❌ Con problemas: 0/52 (0%)
 - Problemas principales: 
   - Ninguno - Todos los endpoints principales funcionan correctamente ✅
   - **Nota**: `POST /api/servers/switch/` tiene problema de CSRF pero no es crítico

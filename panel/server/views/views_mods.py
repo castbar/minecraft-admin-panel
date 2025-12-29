@@ -10,6 +10,7 @@ import json
 import os
 import shutil
 from ..models import Server, UserServerRole
+from ..models.models_mods_pool import ModPool
 from ..utils.permissions import _get_server_id_from_request, require_server_permission
 
 def _get_rcon_connection(server):
@@ -31,6 +32,7 @@ def mods_list(request, server_id=None):
     
     Retorna lista de mods con información de si están habilitados o no.
     Un mod está deshabilitado si tiene extensión .disabled o está en carpeta mods-disabled/
+    Incluye información de configuración si existe.
     """
     # Obtener server_id del header (método principal) o de la URL (compatibilidad)
     resolved_server_id = _get_server_id_from_request(request) or server_id
@@ -52,53 +54,115 @@ def mods_list(request, server_id=None):
     
     mods_path = os.path.join(server.minecraft_data_path, 'mods')
     mods_disabled_path = os.path.join(server.minecraft_data_path, 'mods-disabled')
+    plugins_path = os.path.join(server.minecraft_data_path, 'plugins')
+    
+    # Determinar carpeta según tipo de servidor
+    if server.server_type in ['bukkit', 'spigot', 'paper']:
+        # Plugins van en carpeta plugins/
+        install_path = plugins_path
+    else:
+        # Mods van en carpeta mods/
+        install_path = mods_path
     
     mods = []
     
-    # Listar mods habilitados (en carpeta mods/)
-    if os.path.exists(mods_path):
-        for file in os.listdir(mods_path):
+    # Listar mods/plugins habilitados
+    if os.path.exists(install_path):
+        for file in os.listdir(install_path):
             if file.endswith('.jar'):
-                file_path = os.path.join(mods_path, file)
+                file_path = os.path.join(install_path, file)
                 size = os.path.getsize(file_path)
-                mods.append({
+                
+                # Buscar en pool de mods
+                mod_pool = ModPool.objects.filter(name__iexact=file.replace('.jar', '')).first()
+                mod_info = {
                     'name': file,
                     'enabled': True,
                     'size': size,
                     'size_mb': round(size / (1024 * 1024), 2),
-                    'path': 'mods'
-                })
+                    'path': 'mods' if server.server_type not in ['bukkit', 'spigot', 'paper'] else 'plugins',
+                    'has_config': False,
+                }
+                
+                # Agregar información del pool si existe
+                if mod_pool:
+                    mod_info['pool_info'] = {
+                        'id': mod_pool.id,
+                        'display_name': mod_pool.display_name,
+                        'mod_type': mod_pool.mod_type,
+                        'category': mod_pool.category,
+                        'has_config': bool(mod_pool.config_file_path),
+                        'config_file_path': mod_pool.config_file_path,
+                        'config_format': mod_pool.config_format,
+                    }
+                    mod_info['has_config'] = bool(mod_pool.config_file_path)
+                
+                mods.append(mod_info)
     
-    # Listar mods deshabilitados (en carpeta mods-disabled/ o con .disabled)
-    if os.path.exists(mods_disabled_path):
-        for file in os.listdir(mods_disabled_path):
-            if file.endswith('.jar') or file.endswith('.jar.disabled'):
-                file_path = os.path.join(mods_disabled_path, file)
-                # Remover .disabled de la extensión para mostrar nombre real
-                display_name = file.replace('.disabled', '')
-                size = os.path.getsize(file_path)
-                mods.append({
-                    'name': display_name,
-                    'enabled': False,
-                    'size': size,
-                    'size_mb': round(size / (1024 * 1024), 2),
-                    'path': 'mods-disabled'
-                })
-    
-    # También buscar mods con extensión .disabled en carpeta mods/
-    if os.path.exists(mods_path):
-        for file in os.listdir(mods_path):
-            if file.endswith('.jar.disabled'):
-                file_path = os.path.join(mods_path, file)
-                display_name = file.replace('.disabled', '')
-                size = os.path.getsize(file_path)
-                mods.append({
-                    'name': display_name,
-                    'enabled': False,
-                    'size': size,
-                    'size_mb': round(size / (1024 * 1024), 2),
-                    'path': 'mods'
-                })
+    # Listar mods deshabilitados (solo para mods, no plugins)
+    if server.server_type not in ['bukkit', 'spigot', 'paper']:
+        if os.path.exists(mods_disabled_path):
+            for file in os.listdir(mods_disabled_path):
+                if file.endswith('.jar') or file.endswith('.jar.disabled'):
+                    file_path = os.path.join(mods_disabled_path, file)
+                    display_name = file.replace('.disabled', '')
+                    size = os.path.getsize(file_path)
+                    
+                    mod_pool = ModPool.objects.filter(name__iexact=display_name.replace('.jar', '')).first()
+                    mod_info = {
+                        'name': display_name,
+                        'enabled': False,
+                        'size': size,
+                        'size_mb': round(size / (1024 * 1024), 2),
+                        'path': 'mods-disabled',
+                        'has_config': False,
+                    }
+                    
+                    if mod_pool:
+                        mod_info['pool_info'] = {
+                            'id': mod_pool.id,
+                            'display_name': mod_pool.display_name,
+                            'mod_type': mod_pool.mod_type,
+                            'category': mod_pool.category,
+                            'has_config': bool(mod_pool.config_file_path),
+                            'config_file_path': mod_pool.config_file_path,
+                            'config_format': mod_pool.config_format,
+                        }
+                        mod_info['has_config'] = bool(mod_pool.config_file_path)
+                    
+                    mods.append(mod_info)
+        
+        # Buscar mods con .disabled en carpeta mods/
+        if os.path.exists(mods_path):
+            for file in os.listdir(mods_path):
+                if file.endswith('.jar.disabled'):
+                    file_path = os.path.join(mods_path, file)
+                    display_name = file.replace('.disabled', '')
+                    size = os.path.getsize(file_path)
+                    
+                    mod_pool = ModPool.objects.filter(name__iexact=display_name.replace('.jar', '')).first()
+                    mod_info = {
+                        'name': display_name,
+                        'enabled': False,
+                        'size': size,
+                        'size_mb': round(size / (1024 * 1024), 2),
+                        'path': 'mods',
+                        'has_config': False,
+                    }
+                    
+                    if mod_pool:
+                        mod_info['pool_info'] = {
+                            'id': mod_pool.id,
+                            'display_name': mod_pool.display_name,
+                            'mod_type': mod_pool.mod_type,
+                            'category': mod_pool.category,
+                            'has_config': bool(mod_pool.config_file_path),
+                            'config_file_path': mod_pool.config_file_path,
+                            'config_format': mod_pool.config_format,
+                        }
+                        mod_info['has_config'] = bool(mod_pool.config_file_path)
+                    
+                    mods.append(mod_info)
     
     return JsonResponse({'success': True, 'data': mods})
 

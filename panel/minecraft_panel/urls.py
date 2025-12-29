@@ -1,45 +1,13 @@
 """
 URL configuration for minecraft_panel project.
+
+NOTA: El frontend Ionic se sirve desde Nginx (servicio minecraft-admin-frontend).
+Django solo maneja APIs, admin y autenticación.
 """
 from django.contrib import admin
-from django.urls import path, include, re_path
+from django.urls import path, include
 from django.contrib.auth import views as auth_views
-from django.views.static import serve
-from django.http import FileResponse, Http404
-from django.shortcuts import redirect
-from pathlib import Path
-import os
 from server.views import views, views_api, views_settings, views_backup, views_auth, views_docker, views_versions, views_mods, views_mods_config, views_mods_config_simple, views_mods_pool
-
-# Ruta al frontend compilado (si existe)
-FRONTEND_DIST = Path(__file__).resolve().parent.parent.parent / 'frontend' / 'dist'
-
-def serve_frontend_static(request, path):
-    """Servir archivos estáticos del frontend con MIME types correctos"""
-    file_path = FRONTEND_DIST / path
-    if file_path.exists() and file_path.is_file():
-        return FileResponse(open(file_path, 'rb'), content_type=get_content_type(path))
-    raise Http404()
-    
-def get_content_type(path):
-    """Determinar el content type basado en la extensión del archivo"""
-    ext = os.path.splitext(path)[1].lower()
-    content_types = {
-        '.css': 'text/css',
-        '.js': 'application/javascript',
-        '.json': 'application/json',
-        '.png': 'image/png',
-        '.jpg': 'image/jpeg',
-        '.jpeg': 'image/jpeg',
-        '.gif': 'image/gif',
-        '.svg': 'image/svg+xml',
-        '.ico': 'image/x-icon',
-        '.woff': 'font/woff',
-        '.woff2': 'font/woff2',
-        '.ttf': 'font/ttf',
-        '.eot': 'application/vnd.ms-fontobject',
-    }
-    return content_types.get(ext, 'application/octet-stream')
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -129,24 +97,9 @@ urlpatterns = [
         path('minecraft/versions/create/', views_versions.create_version, name='create_version'),
     ])),
     
-    # Autenticación (solo login/logout, el frontend Ionic maneja el resto)
+    # Autenticación (login/logout - Nginx hace proxy a estas rutas)
     path('login/', views_auth.LoggedLoginView.as_view(template_name='panel/login.html'), name='login'),
     path('logout/', auth_views.LogoutView.as_view(), name='logout'),
-    
-    # Servir archivos estáticos del frontend Ionic (JS, CSS, imágenes, etc.) ANTES del catch-all
-    # Usar vista personalizada para MIME types correctos
-] + ([re_path(r'^(.+\.(css|js|png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|eot|json))$', serve_frontend_static)] 
-    if FRONTEND_DIST.exists() and (FRONTEND_DIST / 'index.html').exists() else []) + [
-    
-    # Servir frontend Ionic compilado - todas las rutas que no sean API, admin, static, media, login, logout
-    # se sirven desde el index.html del frontend (SPA routing)
-    re_path(r'^(?!api|admin|static|media|login|logout|.*\.(css|js|png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|eot|json)).*$', serve, {
-        'document_root': str(FRONTEND_DIST),
-        'path': 'index.html'
-    }) if FRONTEND_DIST.exists() and (FRONTEND_DIST / 'index.html').exists() else [
-        # Si no hay frontend compilado, redirigir a login
-        path('', lambda request: redirect('/login/'), name='home'),
-    ],
 ]
 
 

@@ -108,14 +108,11 @@ USE_TZ = True
 STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
-# Frontend compilado (si existe)
-FRONTEND_DIST = BASE_DIR.parent / 'frontend' / 'dist'
+# NOTA: El frontend se sirve desde Nginx (servicio separado)
+# Django solo maneja archivos estáticos del admin y panel interno
 STATICFILES_DIRS = [
     BASE_DIR / 'static',
 ]
-# Agregar frontend solo si existe
-if FRONTEND_DIST.exists() and (FRONTEND_DIST / 'index.html').exists():
-    STATICFILES_DIRS.append(FRONTEND_DIST)
 
 # Admin customization
 ADMIN_SITE_HEADER = "Minecraft Server Manager"

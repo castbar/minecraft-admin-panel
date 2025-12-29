@@ -14,10 +14,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copiar código Django
 COPY panel/ .
 
-# Copiar frontend compilado (se compila antes del build con el script build-and-push.sh)
-# Si está vacío, Django usará los templates HTML
-# NOTA: La ruta debe ser relativa al contexto de build (directorio raíz del proyecto)
-COPY frontend/dist/ /app/frontend/dist/
+# NOTA: El frontend se sirve desde Nginx (servicio separado)
+# Django solo maneja APIs y admin, no necesita el frontend compilado
 
 # Exponer puerto
 EXPOSE 8000

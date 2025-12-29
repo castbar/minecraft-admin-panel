@@ -35,15 +35,22 @@ if [ -d "frontend" ] && [ -f "frontend/package.json" ]; then
     
     # Compilar con baseHref correcto
     echo -e "${BLUE}🔨 Compilando para producción...${NC}"
-    npm run build -- --configuration production --base-href=/
+    ionic build --prod --base-href=/ || npm run build -- --base-href=/
     
-    # Verificar que se compiló correctamente
-    if [ ! -f "dist/index.html" ]; then
-        echo -e "${YELLOW}⚠️  Advertencia: dist/index.html no encontrado después de compilar${NC}"
-        echo -e "${YELLOW}   Verificando estructura de dist...${NC}"
-        ls -la dist/ || echo "Directorio dist no existe"
-    else
+    # Verificar que se compiló correctamente (Ionic usa www/ en versiones recientes)
+    if [ -d "www" ] && [ -f "www/index.html" ]; then
+        echo -e "${GREEN}✅ Frontend compilado correctamente en www/${NC}"
+    elif [ -f "dist/index.html" ]; then
         echo -e "${GREEN}✅ Frontend compilado correctamente en dist/${NC}"
+        # Si usa dist/, copiar a www/ para el Dockerfile
+        if [ ! -d "www" ]; then
+            cp -r dist www
+        fi
+    else
+        echo -e "${YELLOW}⚠️  Advertencia: index.html no encontrado después de compilar${NC}"
+        echo -e "${YELLOW}   Verificando estructura...${NC}"
+        ls -la www/ 2>/dev/null || ls -la dist/ 2>/dev/null || echo "Ningún directorio de output encontrado"
+        exit 1
     fi
     
     cd ..

@@ -7,13 +7,14 @@ RUN apk add --no-cache wget
 # Copiar configuración de Nginx
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-# Copiar archivos del frontend compilado
-# NOTA: El contexto de build es frontend/, así que dist/ está en el contexto
-COPY dist/ /usr/share/nginx/html/
+# Copiar archivos del frontend compilado (Ionic usa www/ en versiones recientes)
+# El script de build crea un symlink o copia www/ a dist/ para compatibilidad
+COPY www/ /usr/share/nginx/html/
 
-# Verificar que index.html existe, si no, crear uno temporal
+# Verificar que index.html existe
 RUN if [ ! -f /usr/share/nginx/html/index.html ]; then \
-      echo '<!DOCTYPE html><html><head><title>Minecraft Admin Panel</title><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head><body style="font-family: Arial, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #f5f5f5;"><div style="text-align: center; padding: 2rem; background: white; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);"><h1 style="color: #667eea;">Frontend no compilado</h1><p>Compila el frontend Ionic antes de construir la imagen.</p></div></body></html>' > /usr/share/nginx/html/index.html; \
+      echo "ERROR: index.html no encontrado en www/" >&2; \
+      exit 1; \
     fi
 
 # Exponer puerto 80
@@ -25,4 +26,3 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
 
 # Iniciar Nginx
 CMD ["nginx", "-g", "daemon off;"]
-

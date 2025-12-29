@@ -17,8 +17,8 @@ def dashboard(request):
         from django.contrib.auth.views import redirect_to_login
         return redirect_to_login(request.get_full_path())
     
-    from .models import Server, UserServerRole
-    from .models_multi import ServerSession
+    from ..models import Server, UserServerRole
+    from ..models.models_multi import ServerSession
     
     # Obtener servidor desde parámetro (cambio manual) o detección automática
     server_id = request.GET.get('server_id')
@@ -50,7 +50,7 @@ def dashboard(request):
                     server_hosts = os.environ.get('SERVER_HOSTS', '').split(',')
                     if server_host in server_hosts or server_host in ['localhost', '127.0.0.1']:
                         # Si es el dominio central, usar servidor por defecto del usuario
-                        from .models_multi import UserPreference
+                        from ..models.models_multi import UserPreference
                         try:
                             pref = UserPreference.objects.get(user=request.user)
                             if pref.default_server:
@@ -128,7 +128,7 @@ def _detect_server_from_request(request):
     
     # Buscar servidor por host exacto o parcial
     try:
-        from .models import Server
+        from ..models import Server
         # Primero buscar coincidencia exacta
         server = Server.objects.filter(host=host, is_active=True).first()
         

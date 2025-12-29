@@ -5,7 +5,8 @@ from .models import (
     Backup, BackupSchedule,
     ServerStatistic, ServerEvent,
     IPWhitelist, IPBlacklist, RateLimitRule, SecurityLog,
-    Ticket, TicketComment, PlayerRanking
+    Ticket, TicketComment, PlayerRanking,
+    MinecraftVersion
 )
 
 # Configurar branding de Castbar
@@ -37,8 +38,27 @@ class ServerAdmin(admin.ModelAdmin):
 @admin.register(UserServerRole)
 class UserServerRoleAdmin(admin.ModelAdmin):
     list_display = ['user', 'server', 'role', 'created_at']
-    list_filter = ['role', 'created_at']
-    search_fields = ['user__username', 'server__name']
+
+@admin.register(MinecraftVersion)
+class MinecraftVersionAdmin(admin.ModelAdmin):
+    list_display = ['version', 'display_name', 'is_latest', 'is_stable', 'is_supported', 'release_date']
+    list_filter = ['is_latest', 'is_stable', 'is_supported', 'release_date']
+    search_fields = ['version', 'display_name']
+    fieldsets = (
+        ('Información Básica', {
+            'fields': ('version', 'display_name', 'release_date')
+        }),
+        ('Estado', {
+            'fields': ('is_latest', 'is_stable', 'is_supported')
+        }),
+        ('Compatibilidad', {
+            'fields': ('server_types',),
+            'description': 'Tipos de servidor compatibles: vanilla, fabric, forge, bukkit, spigot, paper'
+        }),
+        ('Notas', {
+            'fields': ('notes',)
+        }),
+    )
 
 @admin.register(MinecraftUser)
 class MinecraftUserAdmin(admin.ModelAdmin):

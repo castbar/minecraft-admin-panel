@@ -6,13 +6,13 @@ from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 from django.shortcuts import get_object_or_404
 import json
-from .models import Server, UserServerRole
-from .docker_control import (
+from ..models import Server, UserServerRole
+from ..utils.docker_control import (
     create_container_from_compose,
     get_container_status,
     get_container_info
 )
-from .notifications import send_notification
+from ..utils.notifications import send_notification
 
 def _check_server_permission(request, server_id, permission_needed):
     """Helper para verificar permisos"""
@@ -33,6 +33,7 @@ def _check_server_permission(request, server_id, permission_needed):
     
     return server, None
 
+@csrf_exempt
 @login_required
 @require_http_methods(["POST"])
 def create_server(request):
@@ -68,18 +69,45 @@ def create_server(request):
                     'error': f'Missing required field: {field}'
                 }, status=400)
         
+        # Validar puerto RCON
+        rcon_port = int(data['rcon_port'])
+        if rcon_port < 1 or rcon_port > 65535:
+            return JsonResponse({
+                'success': False,
+                'error': 'Invalid RCON port: must be between 1 and 65535'
+            }, status=400)
+        
         # Crear registro en la base de datos (sin crear contenedor Docker)
         server = Server.objects.create(
             name=data['name'],
             host=data['host'],
             container_name=data.get('container_name', data['host']),
-            rcon_port=data['rcon_port'],
+            rcon_port=rcon_port,
             rcon_password=data['rcon_password'],
             minecraft_data_path=data.get('minecraft_data_path', '/data'),
             is_active=True,
             enable_whitelist=data.get('enable_whitelist', True),
             online_mode=data.get('online_mode', False),
             auth_mode=data.get('auth_mode', 'whitelist'),
+            is_public=data.get('is_public', False),
+            is_hidden=data.get('is_hidden', False),
+            # Tipo de servidor y versión
+            server_type=data.get('server_type', 'vanilla'),
+            minecraft_version=data.get('minecraft_version', 'latest'),
+            # Mods y plugins base
+            install_fabric_api=data.get('install_fabric_api', False),
+            install_forge=data.get('install_forge', False),
+            install_luckperms=data.get('install_luckperms', False),
+            install_worldedit=data.get('install_worldedit', False),
+            install_proximity_chat=data.get('install_proximity_chat', False),
+            install_spark=data.get('install_spark', True),
+            install_more_inventory=data.get('install_more_inventory', False),
+            install_jei=data.get('install_jei', False),
+            install_wthit=data.get('install_wthit', False),
+            install_essentials=data.get('install_essentials', False),
+            # Mods y plugins adicionales
+            additional_mods=data.get('additional_mods', []),
+            additional_plugins=data.get('additional_plugins', []),
         )
         
         # Asignar rol de admin al usuario que creó el servidor

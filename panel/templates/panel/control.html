@@ -1,266 +1,125 @@
 {% extends 'panel/base.html' %}
 
-{% block title %}Control - Minecraft Server Manager{% endblock %}
+{% block title %}Control del Servidor - {{ block.super }}{% endblock %}
 
 {% block content %}
-<div class="container-fluid">
-    <h2 class="mb-4"><i class="bi bi-play-circle"></i> Control del Servidor</h2>
-    
-    <div class="row mb-4">
-        <div class="col-md-8">
-            <div class="card">
-                <div class="card-header">
-                    <h5>Acciones del Servidor</h5>
-                </div>
-                <div class="card-body">
-                    <div class="d-grid gap-2">
-                        <button class="btn btn-success btn-lg" onclick="controlServer('start')">
-                            <i class="bi bi-play-fill"></i> Iniciar Servidor
-                        </button>
-                        <button class="btn btn-danger btn-lg" onclick="controlServer('stop')">
-                            <i class="bi bi-stop-fill"></i> Detener Servidor
-                        </button>
-                        <button class="btn btn-warning btn-lg" onclick="controlServer('restart')">
-                            <i class="bi bi-arrow-clockwise"></i> Reiniciar Servidor
-                        </button>
-                        <button class="btn btn-secondary btn-lg" onclick="controlServer('pause')">
-                            <i class="bi bi-pause-fill"></i> Pausar Servidor
-                        </button>
-                        <button class="btn btn-info btn-lg" onclick="controlServer('unpause')">
-                            <i class="bi bi-play-fill"></i> Reanudar Servidor
-                        </button>
-                    </div>
-                    <div id="control-status" class="mt-3"></div>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-4">
-            <div class="card">
-                <div class="card-header">
-                    <h5>Estado del Contenedor</h5>
-                </div>
-                <div class="card-body">
-                    <div id="container-status">Cargando...</div>
-                </div>
-            </div>
-        </div>
-    </div>
-    
-    <div class="row">
-        <div class="col-12">
-            <div class="card">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <h5>Gestionar Servidores</h5>
-                    <button class="btn btn-primary" onclick="showAddServerModal()">
-                        <i class="bi bi-plus-circle"></i> Agregar Servidor
-                    </button>
-                </div>
-                <div class="card-body">
-                    <div id="servers-list">Cargando servidores...</div>
-                </div>
-            </div>
-        </div>
-    </div>
+<div class="card">
+    <h2>Control del Servidor: {{ server.name }}</h2>
+    <p><strong>Host:</strong> {{ server.host }}</p>
+    <p><strong>Rol:</strong> {{ user_role.role }}</p>
 </div>
 
-<!-- Modal para agregar servidor -->
-<div class="modal fade" id="addServerModal" tabindex="-1">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Agregar Nuevo Servidor</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <div class="mb-3">
-                    <label class="form-label">Nombre del Servidor</label>
-                    <input type="text" class="form-control" id="new-server-name" placeholder="Mi Servidor">
-                </div>
-                <div class="mb-3">
-                    <label class="form-label">Host (IP o nombre del contenedor)</label>
-                    <input type="text" class="form-control" id="new-server-host" placeholder="minecraft-server">
-                </div>
-                <div class="mb-3">
-                    <label class="form-label">Nombre del Contenedor Docker</label>
-                    <input type="text" class="form-control" id="new-server-container" placeholder="minecraft-server">
-                </div>
-                <div class="row">
-                    <div class="col-md-6">
-                        <div class="mb-3">
-                            <label class="form-label">Puerto RCON</label>
-                            <input type="number" class="form-control" id="new-server-rcon-port" value="25575">
-                        </div>
-                    </div>
-                    <div class="col-md-6">
-                        <div class="mb-3">
-                            <label class="form-label">Contraseña RCON</label>
-                            <input type="password" class="form-control" id="new-server-rcon-password" placeholder="rcon_password">
-                        </div>
-                    </div>
-                </div>
-                <div class="mb-3">
-                    <label class="form-label">Ruta de Datos de Minecraft</label>
-                    <input type="text" class="form-control" id="new-server-data-path" value="/data">
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                <button type="button" class="btn btn-primary" onclick="createServer()">Crear Servidor</button>
-            </div>
-        </div>
-    </div>
+<div class="card">
+    <h2>Acciones de Control</h2>
+    <button class="btn" onclick="sendCommand('start')">▶️ Iniciar</button>
+    <button class="btn" onclick="sendCommand('stop')">⏹️ Detener</button>
+    <button class="btn" onclick="sendCommand('restart')">🔄 Reiniciar</button>
+    <button class="btn btn-secondary" onclick="sendCommand('pause')">⏸️ Pausar</button>
+</div>
+
+<div class="card">
+    <h2>Estado del Servidor</h2>
+    <div id="serverStatus">Cargando...</div>
+</div>
+
+<div class="card">
+    <h2>Comando RCON</h2>
+    <input type="text" id="rconCommand" placeholder="Ingresa un comando..." style="width: 70%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 5px;">
+    <button class="btn" onclick="sendRconCommand()">Enviar</button>
+    <div id="rconResponse" style="margin-top: 1rem; padding: 1rem; background: #f9f9f9; border-radius: 5px; min-height: 100px;"></div>
 </div>
 {% endblock %}
 
 {% block extra_js %}
 <script>
-    function controlServer(action) {
-        if (!serverId) return;
-        if (!confirm(`¿${action.toUpperCase()} el servidor?`)) return;
-        
-        const statusEl = document.getElementById('control-status');
-        statusEl.innerHTML = '<div class="spinner-border spinner-border-sm" role="status"></div> Ejecutando...';
-        
-        fetch(`/api/servers/${serverId}/control/${action}/`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': getCookie('csrftoken')
-            }
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                statusEl.innerHTML = '<div class="alert alert-success">' + data.message + '</div>';
-                loadContainerStatus();
-            } else {
-                statusEl.innerHTML = '<div class="alert alert-danger">Error: ' + (data.error || 'Error desconocido') + '</div>';
-            }
-        })
-        .catch(error => {
-            statusEl.innerHTML = '<div class="alert alert-danger">Error de conexión: ' + error + '</div>';
-        });
-    }
+function sendCommand(action) {
+    fetch(`/api/servers/{{ server.id }}/control/${action}/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': getCookie('csrftoken'),
+            'Content-Type': 'application/json'
+        },
+        credentials: 'same-origin'
+    })
+    .then(response => response.json())
+    .then(data => {
+        alert(data.message || data.error || 'Comando enviado');
+        updateServerStatus();
+    })
+    .catch(error => {
+        alert('Error: ' + error);
+    });
+}
+
+function sendRconCommand() {
+    const command = document.getElementById('rconCommand').value;
+    if (!command) return;
     
-    function loadContainerStatus() {
-        if (!serverId) return;
-        
-        fetch(`/api/servers/${serverId}/container/`)
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    const statusEl = document.getElementById('container-status');
-                    const status = data.data.status || 'unknown';
-                    const statusClass = {
-                        'running': 'success',
-                        'stopped': 'danger',
-                        'paused': 'warning',
-                        'restarting': 'info'
-                    }[status] || 'secondary';
-                    
-                    statusEl.innerHTML = `
-                        <p><strong>Estado:</strong> <span class="badge bg-${statusClass}">${status}</span></p>
-                        ${data.data.image ? `<p><strong>Imagen:</strong> ${data.data.image}</p>` : ''}
-                        ${data.data.created ? `<p><strong>Creado:</strong> ${new Date(data.data.created * 1000).toLocaleString('es-ES')}</p>` : ''}
-                    `;
-                }
-            })
-            .catch(error => {
-                document.getElementById('container-status').innerHTML = '<p class="text-danger">Error: ' + error + '</p>';
-            });
-    }
-    
-    function loadServers() {
-        fetch(`/api/servers/`)
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    const list = document.getElementById('servers-list');
-                    if (data.data && data.data.length > 0) {
-                        list.innerHTML = '<div class="table-responsive"><table class="table table-hover"><thead><tr><th>Nombre</th><th>Host</th><th>Rol</th><th>Acciones</th></tr></thead><tbody>' + 
-                            data.data.map(server => 
-                                `<tr>
-                                    <td>${server.name}</td>
-                                    <td>${server.host}</td>
-                                    <td><span class="badge bg-info">${server.role}</span></td>
-                                    <td>
-                                        <a href="/?server_id=${server.id}" class="btn btn-sm btn-primary">
-                                            <i class="bi bi-arrow-right-circle"></i> Usar
-                                        </a>
-                                    </td>
-                                </tr>`
-                            ).join('') + '</tbody></table></div>';
-                    } else {
-                        list.innerHTML = '<p class="text-muted">No hay servidores disponibles</p>';
-                    }
-                }
-            })
-            .catch(error => {
-                document.getElementById('servers-list').innerHTML = '<p class="text-danger">Error: ' + error + '</p>';
-            });
-    }
-    
-    function showAddServerModal() {
-        const modal = new bootstrap.Modal(document.getElementById('addServerModal'));
-        modal.show();
-    }
-    
-    function createServer() {
-        const name = document.getElementById('new-server-name').value.trim();
-        const host = document.getElementById('new-server-host').value.trim();
-        const container = document.getElementById('new-server-container').value.trim();
-        const rconPort = parseInt(document.getElementById('new-server-rcon-port').value);
-        const rconPassword = document.getElementById('new-server-rcon-password').value.trim();
-        const dataPath = document.getElementById('new-server-data-path').value.trim();
-        
-        if (!name || !host || !rconPassword) {
-            alert('Por favor completa los campos requeridos');
-            return;
+    fetch(`/api/command/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': getCookie('csrftoken'),
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            server_id: {{ server.id }},
+            command: command
+        }),
+        credentials: 'same-origin'
+    })
+    .then(response => response.json())
+    .then(data => {
+        document.getElementById('rconResponse').innerHTML = '<pre>' + (data.response || data.error || 'Sin respuesta') + '</pre>';
+    })
+    .catch(error => {
+        document.getElementById('rconResponse').innerHTML = '<pre>Error: ' + error + '</pre>';
+    });
+}
+
+function updateServerStatus() {
+    fetch(`/api/servers/{{ server.id }}/status/`)
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            const status = data.data.online ? '🟢 Online' : '🔴 Offline';
+            const playerCount = data.data.player_count || 0;
+            const maxPlayers = data.data.max_players || 0;
+            
+            document.getElementById('serverStatus').innerHTML = `
+                <p><strong>Estado:</strong> ${status}</p>
+                <p><strong>Jugadores:</strong> ${playerCount} / ${maxPlayers}</p>
+            `;
+        } else {
+            document.getElementById('serverStatus').innerHTML = `
+                <p><strong>Estado:</strong> ❌ Error al obtener estado</p>
+            `;
         }
-        
-        fetch(`/api/servers/create/`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': getCookie('csrftoken')
-            },
-            body: JSON.stringify({
-                name: name,
-                host: host,
-                container_name: container || host,
-                rcon_port: rconPort || 25575,
-                rcon_password: rconPassword,
-                minecraft_data_path: dataPath || '/data'
-            })
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                alert('Servidor creado exitosamente');
-                bootstrap.Modal.getInstance(document.getElementById('addServerModal')).hide();
-                // Limpiar formulario
-                document.getElementById('new-server-name').value = '';
-                document.getElementById('new-server-host').value = '';
-                document.getElementById('new-server-container').value = '';
-                document.getElementById('new-server-rcon-port').value = '25575';
-                document.getElementById('new-server-rcon-password').value = '';
-                document.getElementById('new-server-data-path').value = '/data';
-                loadServers();
-                // Recargar página para mostrar el nuevo servidor
-                setTimeout(() => window.location.reload(), 1000);
-            } else {
-                alert('Error: ' + (data.error || 'Error desconocido'));
+    })
+    .catch(error => {
+        document.getElementById('serverStatus').innerHTML = `
+            <p><strong>Estado:</strong> ❌ Error: ${error}</p>
+        `;
+    });
+}
+
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
             }
-        })
-        .catch(error => {
-            alert('Error de conexión: ' + error);
-        });
+        }
     }
-    
-    if (serverId) {
-        loadContainerStatus();
-        setInterval(loadContainerStatus, 5000);
-    }
-    loadServers();
+    return cookieValue;
+}
+
+// Actualizar estado al cargar
+updateServerStatus();
+setInterval(updateServerStatus, 5000);
 </script>
 {% endblock %}
+

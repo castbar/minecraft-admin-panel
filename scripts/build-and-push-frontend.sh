@@ -1,6 +1,5 @@
 #!/bin/bash
-# Script para construir y subir imagen del panel Django al registry
-# Compila el frontend localmente y luego construye la imagen
+# Script para construir y subir imagen del frontend Ionic al registry
 
 set -e
 
@@ -13,15 +12,15 @@ NC='\033[0m' # No Color
 # Variables
 REGISTRY="${DOCKER_REGISTRY:-registry.castbar.dev}"
 NAMESPACE="castbar"
-IMAGE_NAME="minecraft-admin-panel"
-VERSION="${1:-latest}"  # Usar versión pasada como argumento o 'latest' por defecto
+IMAGE_NAME="minecraft-admin-frontend"
+VERSION="${1:-latest}"
 
 FULL_IMAGE="${REGISTRY}/${NAMESPACE}/${IMAGE_NAME}:${VERSION}"
 
 # Ir al directorio raíz del proyecto
 cd "$(dirname "$0")/.."
 
-echo -e "${BLUE}📦 Construyendo imagen: ${FULL_IMAGE}${NC}"
+echo -e "${BLUE}📦 Construyendo imagen frontend: ${FULL_IMAGE}${NC}"
 
 # Compilar frontend si existe
 if [ -d "frontend" ] && [ -f "frontend/package.json" ]; then
@@ -35,14 +34,14 @@ if [ -d "frontend" ] && [ -f "frontend/package.json" ]; then
     cd ..
     echo -e "${GREEN}✅ Frontend compilado${NC}"
 else
-    echo -e "${YELLOW}⚠️  Frontend no encontrado, creando directorio vacío para evitar error en COPY${NC}"
+    echo -e "${YELLOW}⚠️  Frontend no encontrado, creando directorio vacío${NC}"
     mkdir -p frontend/dist
     touch frontend/dist/.gitkeep
 fi
 
-# Construir imagen desde la raíz del proyecto
+# Construir imagen desde el directorio frontend
 echo -e "${BLUE}🐳 Construyendo imagen Docker...${NC}"
-docker buildx build --platform linux/amd64 -t "${FULL_IMAGE}" -f panel/Dockerfile . --push
+docker buildx build --platform linux/amd64 -t "${FULL_IMAGE}" -f frontend/Dockerfile frontend/ --push
 
 echo -e "${GREEN}✅ Imagen construida y subida${NC}"
 
@@ -56,3 +55,4 @@ if [ "$VERSION" != "latest" ]; then
 fi
 
 echo -e "${GREEN}🎉 Proceso completado${NC}"
+

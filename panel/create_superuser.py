@@ -3,7 +3,7 @@
 import os
 import django
 
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'cobblemon_panel.settings')
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'minecraft_panel.settings')
 django.setup()
 
 from django.contrib.auth import get_user_model

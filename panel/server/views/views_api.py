@@ -6,9 +6,9 @@ from django.shortcuts import get_object_or_404
 import json
 import os
 import mcrcon
-from .models import Server, UserServerRole
-from .notifications import send_notification
-from .docker_control import (
+from ..models import Server, UserServerRole
+from ..utils.notifications import send_notification
+from ..utils.docker_control import (
     start_container, stop_container, restart_container,
     pause_container, unpause_container, get_container_status,
     create_container_from_compose, get_container_info
@@ -22,13 +22,18 @@ def _get_rcon_connection(server):
     try:
         # Log para debugging
         print(f"🔌 Intentando conectar RCON: host={server.host}, port={server.rcon_port}")
-        rcon = mcrcon.MCRcon(server.host, server.rcon_password, port=server.rcon_port)
+        
+        # Si el host es un nombre de contenedor Docker, usar ese nombre directamente
+        # Si es una IP, usar la IP
+        host = server.host
+        
+        rcon = mcrcon.MCRcon(host, server.rcon_password, port=server.rcon_port)
         rcon.connect()
-        print(f"✅ RCON conectado exitosamente a {server.name}")
+        print(f"✅ RCON conectado exitosamente a {server.name} (host: {host})")
         return rcon
     except Exception as e:
         print(f"❌ RCON Error for {server.name}: {str(e)}")
-        print(f"   Host: {server.host}, Port: {server.rcon_port}")
+        print(f"   Host: {server.host}, Port: {server.rcon_port}, Password: {'*' * len(server.rcon_password) if server.rcon_password else 'None'}")
         import traceback
         traceback.print_exc()
         return None
@@ -37,7 +42,7 @@ def _get_rcon_connection(server):
 @require_http_methods(["GET"])
 def servers_list(request):
     """Listar servidores disponibles para el usuario"""
-    from .models_multi import ServerSession
+    from ..models.models_multi import ServerSession
     
     # Detectar si el cliente está en la misma red/VPN
     client_ip = _get_client_ip(request)
@@ -194,7 +199,7 @@ def server_status(request, server_id):
 @require_http_methods(["GET"])
 def server_stats(request, server_id):
     """Obtener estadísticas históricas del servidor para gráficos"""
-    from .models_stats import ServerStatistic
+    from ..models.models_stats import ServerStatistic
     
     server, error_response = _check_server_permission(request, server_id, 'view')
     if error_response:
@@ -237,6 +242,7 @@ def _check_server_permission(request, server_id, permission_needed):
     
     return server, None
 
+@csrf_exempt
 @login_required
 @require_http_methods(["POST"])
 def server_control(request, server_id, action):
@@ -273,6 +279,7 @@ def server_control(request, server_id, action):
         send_notification(server, 'server_control_failed', f"Fallo el comando '{action}' para '{server.name}': {str(e)}")
         return JsonResponse({'success': False, 'error': str(e)}, status=500)
 
+@csrf_exempt
 @login_required
 @require_http_methods(["POST"])
 def whitelist_add(request, server_id):
@@ -280,14 +287,21 @@ def whitelist_add(request, server_id):
     from django.shortcuts import get_object_or_404
     
     # Obtener servidor y verificar permisos
-    server = get_object_or_404(Server, id=server_id, is_active=True)
+    try:
+        server = get_object_or_404(Server, id=server_id, is_active=True)
+    except:
+        return JsonResponse({'success': False, 'error': 'Server not found'}, status=404)
+    
     user_role = UserServerRole.objects.filter(
         user=request.user,
         server=server
     ).first()
     
-    if not user_role or not user_role.has_permission('manage_whitelist'):
-        return JsonResponse({'success': False, 'error': 'Permission denied'}, status=403)
+    if not user_role:
+        return JsonResponse({'success': False, 'error': 'No access to this server'}, status=403)
+    
+    if not user_role.has_permission('manage_whitelist'):
+        return JsonResponse({'success': False, 'error': 'Permission denied: manage_whitelist required'}, status=403)
     
     data = json.loads(request.body)
     username = data.get('username', '').strip()
@@ -315,6 +329,7 @@ def whitelist_add(request, server_id):
         except:
             pass
 
+@csrf_exempt
 @login_required
 @require_http_methods(["POST"])
 def whitelist_remove(request, server_id):
@@ -322,14 +337,21 @@ def whitelist_remove(request, server_id):
     from django.shortcuts import get_object_or_404
     
     # Obtener servidor y verificar permisos
-    server = get_object_or_404(Server, id=server_id, is_active=True)
+    try:
+        server = get_object_or_404(Server, id=server_id, is_active=True)
+    except:
+        return JsonResponse({'success': False, 'error': 'Server not found'}, status=404)
+    
     user_role = UserServerRole.objects.filter(
         user=request.user,
         server=server
     ).first()
     
-    if not user_role or not user_role.has_permission('manage_whitelist'):
-        return JsonResponse({'success': False, 'error': 'Permission denied'}, status=403)
+    if not user_role:
+        return JsonResponse({'success': False, 'error': 'No access to this server'}, status=403)
+    
+    if not user_role.has_permission('manage_whitelist'):
+        return JsonResponse({'success': False, 'error': 'Permission denied: manage_whitelist required'}, status=403)
     
     data = json.loads(request.body)
     username = data.get('username', '').strip()
@@ -390,6 +412,8 @@ def whitelist_list(request, server_id):
             return JsonResponse({'success': True, 'data': whitelist_data})
         except Exception as e:
             print(f"Error obteniendo whitelist vía RCON: {e}")
+            import traceback
+            traceback.print_exc()
         finally:
             try:
                 rcon.disconnect()
@@ -413,6 +437,7 @@ def whitelist_list(request, server_id):
     except Exception as e:
         return JsonResponse({'success': False, 'error': str(e)}, status=500)
 
+@csrf_exempt
 @login_required
 @require_http_methods(["POST"])
 def switch_server(request):
@@ -431,7 +456,7 @@ def switch_server(request):
             return JsonResponse({'success': False, 'error': 'No access to this server'}, status=403)
         
         # Actualizar o crear sesión
-        from .models_multi import ServerSession
+        from ..models.models_multi import ServerSession
         ServerSession.objects.update_or_create(
             user=request.user,
             server=server,
@@ -455,7 +480,7 @@ def switch_server(request):
 @require_http_methods(["GET"])
 def saved_sessions(request):
     """Obtener lista de sesiones de servidores guardadas para el usuario"""
-    from .models_multi import ServerSession
+    from ..models.models_multi import ServerSession
     sessions = ServerSession.objects.filter(user=request.user).select_related('server').order_by('-last_accessed')
     data = [{
         'id': s.server.id,
@@ -470,7 +495,7 @@ def saved_sessions(request):
 @require_http_methods(["GET"])
 def security_logs(request):
     """Obtener logs de seguridad (intentos de login, etc.)"""
-    from .models import SecurityLog
+    from ..models import SecurityLog
     
     # Solo admins pueden ver logs de seguridad
     if not request.user.is_staff:

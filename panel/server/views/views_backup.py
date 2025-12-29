@@ -7,8 +7,8 @@ import os
 import subprocess
 import tarfile
 from datetime import datetime
-from .models import Server, Backup, BackupSchedule
-from .permissions import require_server_permission
+from ..models import Server, Backup, BackupSchedule
+from ..utils.permissions import require_server_permission
 
 @login_required
 @require_server_permission('view')
@@ -29,6 +29,7 @@ def backups_list(request, server_id):
     
     return JsonResponse({'success': True, 'data': data})
 
+@csrf_exempt
 @login_required
 @require_server_permission('control_server')
 @require_http_methods(["POST"])
@@ -52,6 +53,7 @@ def backup_create(request, server_id):
         'data': {'id': backup.id, 'name': backup.name}
     })
 
+@csrf_exempt
 @login_required
 @require_server_permission('control_server')
 @require_http_methods(["POST"])

@@ -4,7 +4,7 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from django.conf import settings
-from .models import ServerEvent
+from ..models import ServerEvent
 
 class NotificationService:
     """Servicio de notificaciones"""

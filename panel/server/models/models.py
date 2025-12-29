@@ -3,6 +3,7 @@ from django.contrib.auth.models import User
 from django.core.validators import MinLengthValidator
 import hashlib
 import secrets
+import uuid
 
 # Importar todos los modelos de módulos separados
 from .models_backup import Backup, BackupSchedule
@@ -20,6 +21,15 @@ class Server(models.Model):
         ('public', 'Público (sin autenticación)'),
     ]
     
+    SERVER_TYPE_CHOICES = [
+        ('vanilla', 'Vanilla (oficial)'),
+        ('fabric', 'Fabric'),
+        ('forge', 'Forge'),
+        ('bukkit', 'Bukkit'),
+        ('spigot', 'Spigot'),
+        ('paper', 'Paper'),
+    ]
+    
     name = models.CharField(max_length=100)
     host = models.CharField(max_length=255, help_text="DNS, IP o nombre del contenedor Docker")
     container_name = models.CharField(
@@ -32,6 +42,19 @@ class Server(models.Model):
     rcon_password = models.CharField(max_length=255)
     minecraft_data_path = models.CharField(max_length=500, default='/data')
     is_active = models.BooleanField(default=True)
+    
+    # Tipo de servidor y versión
+    server_type = models.CharField(
+        max_length=20,
+        choices=SERVER_TYPE_CHOICES,
+        default='vanilla',
+        help_text="Tipo de servidor Minecraft"
+    )
+    minecraft_version = models.CharField(
+        max_length=20,
+        default='latest',
+        help_text="Versión de Minecraft (ej: 1.20.1, latest)"
+    )
     
     # Configuración de visibilidad y autenticación
     is_public = models.BooleanField(default=False, help_text="Servidor público (cualquiera puede conectarse)")
@@ -46,9 +69,69 @@ class Server(models.Model):
         help_text="Modo de autenticación del servidor"
     )
     enable_whitelist = models.BooleanField(default=True, help_text="Habilitar whitelist en el servidor")
+    api_key = models.CharField(
+        max_length=64,
+        blank=True,
+        null=True,
+        help_text="API key para autenticación del plugin/mod (se genera automáticamente)"
+    )
     online_mode = models.BooleanField(
         default=False, 
         help_text="Modo online (verifica con Mojang). Si False, permite clientes no premium"
+    )
+    
+    # Mods y plugins base
+    install_fabric_api = models.BooleanField(
+        default=False,
+        help_text="Instalar Fabric API (requerido para mods de Fabric)"
+    )
+    install_forge = models.BooleanField(
+        default=False,
+        help_text="Instalar Forge (requerido para mods de Forge)"
+    )
+    install_luckperms = models.BooleanField(
+        default=False,
+        help_text="Instalar LuckPerms (sistema de permisos)"
+    )
+    install_worldedit = models.BooleanField(
+        default=False,
+        help_text="Instalar WorldEdit (edición de mundos)"
+    )
+    install_proximity_chat = models.BooleanField(
+        default=False,
+        help_text="Instalar chat de proximidad (voice/chat por distancia)"
+    )
+    install_spark = models.BooleanField(
+        default=True,
+        help_text="Instalar Spark (profiling y análisis de rendimiento)"
+    )
+    install_more_inventory = models.BooleanField(
+        default=False,
+        help_text="Instalar Más Mochila (More Inventory) - aumenta inventario del jugador"
+    )
+    install_jei = models.BooleanField(
+        default=False,
+        help_text="Instalar JEI/REI (Just Enough Items) - ver recetas de items"
+    )
+    install_wthit = models.BooleanField(
+        default=False,
+        help_text="Instalar WTHIT (What The Hell Is That) - información de bloques"
+    )
+    install_essentials = models.BooleanField(
+        default=False,
+        help_text="Instalar EssentialsX (comandos esenciales) - solo para Bukkit/Spigot/Paper"
+    )
+    
+    # Configuración adicional
+    additional_mods = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Lista de mods adicionales a instalar (nombres de archivos)"
+    )
+    additional_plugins = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Lista de plugins adicionales a instalar (nombres de archivos)"
     )
     
     created_at = models.DateTimeField(auto_now_add=True)
@@ -59,12 +142,25 @@ class Server(models.Model):
     
     def save(self, *args, **kwargs):
         """Sincronizar configuración con el servidor Minecraft"""
+        # Generar API key si no existe y se necesita para database/both
+        if self.auth_mode in ['database', 'both'] and not self.api_key:
+            self.generate_api_key()
         super().save(*args, **kwargs)
         # TODO: Aplicar cambios al servidor vía RCON o archivos de configuración
     
     def get_auth_mode_display_short(self):
         """Obtener descripción corta del modo de autenticación"""
         return dict(self.AUTH_MODE_CHOICES).get(self.auth_mode, self.auth_mode)
+    
+    def generate_api_key(self):
+        """Generar API key única para el servidor"""
+        if not self.api_key:
+            self.api_key = uuid.uuid4().hex
+        return self.api_key
+    
+    def verify_api_key(self, provided_key):
+        """Verificar API key"""
+        return self.api_key and self.api_key == provided_key
 
 class UserServerRole(models.Model):
     """Roles de usuarios en servidores"""

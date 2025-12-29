@@ -1,5 +1,5 @@
 """
-Django settings for cobblemon_panel project.
+Django settings for minecraft_panel project.
 
 Desarrollado por Castbar - Sistema de Gestión de Servidores Minecraft
 """
@@ -42,7 +42,7 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
-ROOT_URLCONF = 'cobblemon_panel.urls'
+ROOT_URLCONF = 'minecraft_panel.urls'
 
 TEMPLATES = [
     {
@@ -60,7 +60,7 @@ TEMPLATES = [
     },
 ]
 
-WSGI_APPLICATION = 'cobblemon_panel.wsgi.application'
+WSGI_APPLICATION = 'minecraft_panel.wsgi.application'
 
 # Database
 # Usar /data/db/db.sqlite3 para persistencia en volumen Docker
@@ -107,9 +107,15 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
+
+# Frontend compilado (si existe)
+FRONTEND_DIST = BASE_DIR.parent / 'frontend' / 'dist'
 STATICFILES_DIRS = [
     BASE_DIR / 'static',
 ]
+# Agregar frontend solo si existe
+if FRONTEND_DIST.exists() and (FRONTEND_DIST / 'index.html').exists():
+    STATICFILES_DIRS.append(FRONTEND_DIST)
 
 # Admin customization
 ADMIN_SITE_HEADER = "Minecraft Server Manager"
@@ -145,6 +151,10 @@ REST_FRAMEWORK = {
 }
 
 # CORS (solo para desarrollo, en producción solo Tailscale)
-CORS_ALLOWED_ORIGINS = []
-CORS_ALLOW_ALL_ORIGINS = False
+CORS_ALLOWED_ORIGINS = [
+    'http://localhost:4200',  # Angular dev server
+    'http://localhost:8100',  # Ionic dev server
+]
+CORS_ALLOW_ALL_ORIGINS = os.environ.get('CORS_ALLOW_ALL', 'False') == 'True'  # Solo en desarrollo
+CORS_ALLOW_CREDENTIALS = True  # Permitir cookies para autenticación por sesión
 

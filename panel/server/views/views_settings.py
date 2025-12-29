@@ -5,8 +5,8 @@ from django.views.decorators.csrf import csrf_exempt
 import json
 import os
 import re
-from .models import Server, MinecraftUser
-from .permissions import require_server_permission
+from ..models import Server, MinecraftUser
+from ..utils.permissions import require_server_permission
 # Importar función RCON desde views_api
 try:
     from .views_api import _get_rcon_connection
@@ -55,6 +55,7 @@ def server_settings(request, server_id):
             'auth_mode': server.auth_mode,
             'auth_mode_display': server.get_auth_mode_display_short(),
             'enable_whitelist': server.enable_whitelist,
+            'api_key': server.api_key or None,  # No exponer si no existe
             'online_mode': server.online_mode,
             'is_active': server.is_active,
             'max_players': max_players,
@@ -62,6 +63,7 @@ def server_settings(request, server_id):
         }
     })
 
+@csrf_exempt
 @login_required
 @require_server_permission('manage_settings')
 @require_http_methods(["POST"])
@@ -76,6 +78,10 @@ def server_settings_update(request, server_id):
     for field in updatable_fields:
         if field in data:
             setattr(server, field, data[field])
+    
+    # Generar API key si se cambia a modo database/both y no existe
+    if server.auth_mode in ['database', 'both'] and not server.api_key:
+        server.generate_api_key()
     
     server.save()
     
@@ -199,6 +205,7 @@ def minecraft_users_list(request, server_id):
         'data': list(users)
     })
 
+@csrf_exempt
 @login_required
 @require_server_permission('manage_users')
 @require_http_methods(["POST"])
@@ -248,6 +255,7 @@ def minecraft_user_create(request, server_id):
         }
     })
 
+@csrf_exempt
 @login_required
 @require_server_permission('manage_users')
 @require_http_methods(["POST"])

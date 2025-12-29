@@ -1,6 +1,6 @@
 from functools import wraps
 from django.http import JsonResponse
-from .models import Server, UserServerRole
+from ..models import Server, UserServerRole
 
 def require_server_permission(permission):
     """Decorador para verificar permisos en servidores"""

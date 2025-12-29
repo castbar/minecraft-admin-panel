@@ -5,33 +5,60 @@ version: '3.8'
 # Panel de administración para servidores Minecraft
 # Red aislada: minecraft-admin
 # Puerto: 8000 (Panel Django)
+# 
+# USO:
+#   - El archivo .env debe estar en el mismo directorio
+#   - Docker Compose leerá automáticamente las variables del .env
+#   - Para cambiar la imagen: export IMAGE_TAG=latest
 # ============================================
 
 networks:
   minecraft-admin:
     external: true
     name: minecraft-admin
+  cobblemon:
+    external: true
+    name: cobblemon
 
 services:
-  # Panel Django de Administración (Backend API)
-  minecraft-admin-panel:
-    # Para usar registry, comenta 'build' y descomenta 'image':
-    # image: ${DOCKER_REGISTRY:-registry.example.com}/${DOCKER_NAMESPACE:-your-namespace}/minecraft-admin-panel:lts
-    build:
-      context: ./panel
-      dockerfile: Dockerfile
-    container_name: minecraft-admin-panel
+  # Frontend Ionic (Nginx)
+  minecraft-admin-frontend:
+    # Usar imagen del registry (producción)
+    image: ${DOCKER_REGISTRY:-registry.castbar.dev}/${DOCKER_NAMESPACE:-castbar}/minecraft-admin-frontend:${IMAGE_TAG:-latest}
+    # Para desarrollo local, comentar 'image' y descomentar 'build':
+    # build:
+    #   context: ./frontend
+    #   dockerfile: Dockerfile
+    container_name: minecraft-admin-frontend
     networks:
       - minecraft-admin
     ports:
-      - "0.0.0.0:8000:8000"
+      - "${FRONTEND_PORT:-8080}:80"
+    restart: unless-stopped
+    depends_on:
+      - minecraft-admin-panel
+
+  # Panel Django de Administración (Backend API)
+  minecraft-admin-panel:
+    # Usar imagen del registry (producción)
+    image: ${DOCKER_REGISTRY:-registry.castbar.dev}/${DOCKER_NAMESPACE:-castbar}/minecraft-admin-panel:${IMAGE_TAG:-latest}
+    # Para desarrollo local, comentar 'image' y descomentar 'build':
+    # build:
+    #   context: ./panel
+    #   dockerfile: Dockerfile
+    container_name: minecraft-admin-panel
+    networks:
+      - minecraft-admin
+      - cobblemon  # Conectar también a la red de servidores Minecraft
+    # No exponer puerto 8000 públicamente, solo para nginx
+    expose:
+      - "8000"
+    # Leer variables de entorno desde .env
+    env_file:
+      - .env
+    # Variables adicionales (si no están en .env)
     environment:
-      - RCON_HOST=${RCON_HOST:-localhost}
-      - RCON_PORT=${RCON_PORT:-25575}
-      - RCON_PASSWORD=${RCON_PASSWORD:-change-me}
-      - MINECRAFT_DATA_PATH=/data
-      - DEBUG=False
-      - DJANGO_SECRET_KEY=${DJANGO_SECRET_KEY:-change-me-in-production-12345}
+      - MINECRAFT_DATA_PATH=${MINECRAFT_DATA_PATH:-/data}
     volumes:
       - minecraft_data:/data
       - panel_static:/app/staticfiles

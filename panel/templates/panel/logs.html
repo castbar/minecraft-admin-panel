@@ -1,56 +1,61 @@
 {% extends 'panel/base.html' %}
 
-{% block title %}Logs - Minecraft Server Manager{% endblock %}
+{% block title %}Logs - {{ block.super }}{% endblock %}
 
 {% block content %}
-<div class="container-fluid">
-    <h2 class="mb-4"><i class="bi bi-file-text"></i> Logs del Servidor</h2>
-    
-    <div class="card">
-        <div class="card-header">
-            <h5>Últimas Líneas del Log</h5>
-        </div>
-        <div class="card-body">
-            <div id="logs-content" style="background: #1e1e1e; color: #d4d4d4; padding: 15px; border-radius: 5px; font-family: monospace; max-height: 600px; overflow-y: auto;">
-                Cargando logs...
-            </div>
-        </div>
+<div class="card">
+    <h2>Logs del Servidor: {{ server.name }}</h2>
+</div>
+
+<div class="card">
+    <h2>Últimas Líneas</h2>
+    <div style="margin-bottom: 1rem;">
+        <button class="btn" onclick="loadLogs()">Actualizar</button>
+        <button class="btn btn-secondary" onclick="autoRefresh = !autoRefresh">
+            <span id="autoRefreshStatus">Auto-actualizar: OFF</span>
+        </button>
+    </div>
+    <div id="logsContent" style="background: #1e1e1e; color: #d4d4d4; padding: 1rem; border-radius: 5px; font-family: monospace; font-size: 0.9rem; max-height: 600px; overflow-y: auto;">
+        Cargando logs...
     </div>
 </div>
 {% endblock %}
 
 {% block extra_js %}
 <script>
-    function loadLogs() {
-        if (!serverId) return;
-        
-        fetch(`/api/logs/?server_id=${serverId}`)
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    const logsEl = document.getElementById('logs-content');
-                    if (data.data && Array.isArray(data.data)) {
-                        // Si es un array de líneas, unirlas
-                        logsEl.textContent = data.data.join('');
-                    } else if (data.logs) {
-                        logsEl.textContent = data.logs;
-                    } else {
-                        logsEl.textContent = 'No hay logs disponibles';
-                    }
-                    logsEl.scrollTop = logsEl.scrollHeight;
-                } else {
-                    document.getElementById('logs-content').textContent = 'Error: ' + (data.error || 'Error desconocido');
-                }
-            })
-            .catch(error => {
-                document.getElementById('logs-content').textContent = 'Error al cargar logs: ' + error;
-            });
-    }
-    
-    if (serverId) {
+let autoRefresh = false;
+
+function loadLogs() {
+    fetch(`/api/logs/?server_id={{ server.id }}`)
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            const logs = data.data.logs || [];
+            document.getElementById('logsContent').innerHTML = logs.length > 0
+                ? '<pre>' + logs.join('\n') + '</pre>'
+                : '<p>No hay logs disponibles</p>';
+            
+            // Auto-scroll al final
+            const container = document.getElementById('logsContent');
+            container.scrollTop = container.scrollHeight;
+        }
+    })
+    .catch(error => {
+        document.getElementById('logsContent').innerHTML = '<pre>Error al cargar logs: ' + error + '</pre>';
+    });
+}
+
+setInterval(() => {
+    if (autoRefresh) {
         loadLogs();
-        setInterval(loadLogs, 10000);
     }
+}, 2000);
+
+setInterval(() => {
+    document.getElementById('autoRefreshStatus').textContent = 'Auto-actualizar: ' + (autoRefresh ? 'ON' : 'OFF');
+}, 100);
+
+loadLogs();
 </script>
 {% endblock %}
 

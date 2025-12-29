@@ -4,6 +4,6 @@ from . import views
 app_name = 'server'
 
 urlpatterns = [
-    # Las URLs están en cobblemon_panel/urls.py
+    # Las URLs están en minecraft_panel/urls.py
 ]
 

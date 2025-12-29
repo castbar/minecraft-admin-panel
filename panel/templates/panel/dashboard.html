@@ -1,336 +1,43 @@
 {% extends 'panel/base.html' %}
 
-{% block title %}Dashboard - Minecraft Server Manager{% endblock %}
-
-{% block extra_css %}
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-<style>
-    .stat-card {
-        border-left: 4px solid;
-        transition: transform 0.2s;
-    }
-    .stat-card:hover {
-        transform: translateY(-5px);
-        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-    }
-    .stat-card.players { border-left-color: #28a745; }
-    .stat-card.cpu { border-left-color: #007bff; }
-    .stat-card.memory { border-left-color: #ffc107; }
-    .stat-card.tps { border-left-color: #17a2b8; }
-    .chart-container {
-        position: relative;
-        height: 300px;
-        margin-bottom: 20px;
-    }
-</style>
-{% endblock %}
+{% block title %}Dashboard - {{ block.super }}{% endblock %}
 
 {% block content %}
-<div class="container-fluid">
-    <h2 class="mb-4"><i class="bi bi-speedometer2"></i> Dashboard</h2>
-    
-    {% if server %}
-    <!-- Estadísticas en tiempo real -->
-    <div class="row mb-4">
-        <div class="col-md-3">
-            <div class="card stat-card players">
-                <div class="card-body">
-                    <h6 class="text-muted">Jugadores Online</h6>
-                    <h2 id="stat-players">-</h2>
-                    <small class="text-muted" id="stat-max-players">/ -</small>
-                </div>
-            </div>
+{% if server %}
+<div class="card">
+    <h2>Servidor Activo: {{ server.name }}</h2>
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="label">Host</div>
+            <div class="value">{{ server.host }}</div>
         </div>
-        <div class="col-md-3">
-            <div class="card stat-card cpu">
-                <div class="card-body">
-                    <h6 class="text-muted">CPU</h6>
-                    <h2 id="stat-cpu">-</h2>
-                    <small class="text-muted">%</small>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card stat-card memory">
-                <div class="card-body">
-                    <h6 class="text-muted">Memoria</h6>
-                    <h2 id="stat-memory">-</h2>
-                    <small class="text-muted" id="stat-memory-max">/ - MB</small>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card stat-card tps">
-                <div class="card-body">
-                    <h6 class="text-muted">Estado</h6>
-                    <h2 id="stat-status"><span class="badge bg-secondary">Verificando...</span></h2>
-                </div>
-            </div>
+        <div class="stat-card">
+            <div class="label">Rol</div>
+            <div class="value">{{ server.role }}</div>
         </div>
     </div>
-    
-    <!-- Gráficos -->
-    <div class="row mb-4">
-        <div class="col-md-6">
-            <div class="card">
-                <div class="card-header">
-                    <h5><i class="bi bi-people"></i> Jugadores Online (24h)</h5>
-                </div>
-                <div class="card-body">
-                    <div class="chart-container">
-                        <canvas id="playersChart"></canvas>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-6">
-            <div class="card">
-                <div class="card-header">
-                    <h5><i class="bi bi-cpu"></i> Uso de CPU (24h)</h5>
-                </div>
-                <div class="card-body">
-                    <div class="chart-container">
-                        <canvas id="cpuChart"></canvas>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-    
-    <div class="row mb-4">
-        <div class="col-md-6">
-            <div class="card">
-                <div class="card-header">
-                    <h5><i class="bi bi-memory"></i> Uso de Memoria (24h)</h5>
-                </div>
-                <div class="card-body">
-                    <div class="chart-container">
-                        <canvas id="memoryChart"></canvas>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-6">
-            <div class="card">
-                <div class="card-header">
-                    <h5><i class="bi bi-speedometer"></i> TPS (Ticks Per Second) (24h)</h5>
-                </div>
-                <div class="card-body">
-                    <div class="chart-container">
-                        <canvas id="tpsChart"></canvas>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-    
-    <!-- Jugadores Online Actuales -->
-    <div class="row">
-        <div class="col-12">
-            <div class="card">
-                <div class="card-header">
-                    <h5><i class="bi bi-person-check"></i> Jugadores Online Ahora</h5>
-                </div>
-                <div class="card-body">
-                    <div id="current-players-list">Cargando...</div>
-                </div>
-            </div>
-        </div>
-    </div>
-    {% else %}
-    <div class="alert alert-warning">
-        <h4>No hay servidor seleccionado</h4>
-        <p>Por favor, selecciona un servidor desde el panel de administración o configura uno en Django admin.</p>
-        <a href="/admin/" class="btn btn-primary">Ir a Admin</a>
-    </div>
-    {% endif %}
 </div>
-{% endblock %}
 
-{% block extra_js %}
-<script>
-    let playersChart, cpuChart, memoryChart, tpsChart;
-    
-    function updateStats() {
-        if (!serverId) return;
-        
-        // Actualizar estadísticas en tiempo real
-        fetch(`/api/servers/${serverId}/status/`)
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    document.getElementById('stat-players').textContent = data.data.player_count || 0;
-                    document.getElementById('stat-max-players').textContent = `/ ${data.data.max_players || '-'}`;
-                    
-                    if (data.data.cpu_usage !== null && data.data.cpu_usage !== undefined) {
-                        document.getElementById('stat-cpu').textContent = data.data.cpu_usage.toFixed(1);
-                    } else {
-                        document.getElementById('stat-cpu').textContent = '-';
-                    }
-                    
-                    if (data.data.memory_usage_mb) {
-                        document.getElementById('stat-memory').textContent = data.data.memory_usage_mb.toFixed(0);
-                        document.getElementById('stat-memory-max').textContent = `/ ${data.data.memory_max_mb.toFixed(0)} MB`;
-                    } else {
-                        document.getElementById('stat-memory').textContent = '-';
-                        document.getElementById('stat-memory-max').textContent = '/ - MB';
-                    }
-                    
-                    const statusEl = document.getElementById('stat-status');
-                    if (data.data.online) {
-                        statusEl.innerHTML = '<span class="badge bg-success">Online</span>';
-                    } else {
-                        statusEl.innerHTML = '<span class="badge bg-danger">Offline</span>';
-                    }
-                    
-                    // Actualizar lista de jugadores
-                    const playersList = document.getElementById('current-players-list');
-                    if (data.data.players && data.data.players.length > 0) {
-                        playersList.innerHTML = '<ul class="list-group">' + 
-                            data.data.players.map(player => 
-                                `<li class="list-group-item">
-                                    <i class="bi bi-person-circle"></i> ${player}
-                                </li>`
-                            ).join('') + '</ul>';
-                    } else {
-                        playersList.innerHTML = '<p class="text-muted">No hay jugadores online</p>';
-                    }
-                }
-            })
-            .catch(error => {
-                console.error('Error actualizando stats:', error);
-            });
-    }
-    
-    function loadHistoricalStats() {
-        if (!serverId) return;
-        
-        fetch(`/api/servers/${serverId}/stats/`)
-            .then(response => response.json())
-            .then(data => {
-                if (data.success && data.data.timestamps.length > 0) {
-                    const labels = data.data.timestamps.map(ts => {
-                        const date = new Date(ts);
-                        return date.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
-                    });
-                    
-                    // Gráfico de jugadores
-                    if (playersChart) playersChart.destroy();
-                    playersChart = new Chart(document.getElementById('playersChart'), {
-                        type: 'line',
-                        data: {
-                            labels: labels,
-                            datasets: [{
-                                label: 'Jugadores Online',
-                                data: data.data.players,
-                                borderColor: '#28a745',
-                                backgroundColor: 'rgba(40, 167, 69, 0.1)',
-                                tension: 0.4
-                            }]
-                        },
-                        options: {
-                            responsive: true,
-                            maintainAspectRatio: false,
-                            plugins: {
-                                legend: { display: true }
-                            },
-                            scales: {
-                                y: { beginAtZero: true }
-                            }
-                        }
-                    });
-                    
-                    // Gráfico de CPU
-                    if (cpuChart) cpuChart.destroy();
-                    cpuChart = new Chart(document.getElementById('cpuChart'), {
-                        type: 'line',
-                        data: {
-                            labels: labels,
-                            datasets: [{
-                                label: 'CPU %',
-                                data: data.data.cpu,
-                                borderColor: '#007bff',
-                                backgroundColor: 'rgba(0, 123, 255, 0.1)',
-                                tension: 0.4
-                            }]
-                        },
-                        options: {
-                            responsive: true,
-                            maintainAspectRatio: false,
-                            plugins: {
-                                legend: { display: true }
-                            },
-                            scales: {
-                                y: { beginAtZero: true, max: 100 }
-                            }
-                        }
-                    });
-                    
-                    // Gráfico de memoria
-                    if (memoryChart) memoryChart.destroy();
-                    memoryChart = new Chart(document.getElementById('memoryChart'), {
-                        type: 'line',
-                        data: {
-                            labels: labels,
-                            datasets: [{
-                                label: 'Memoria (MB)',
-                                data: data.data.memory,
-                                borderColor: '#ffc107',
-                                backgroundColor: 'rgba(255, 193, 7, 0.1)',
-                                tension: 0.4
-                            }]
-                        },
-                        options: {
-                            responsive: true,
-                            maintainAspectRatio: false,
-                            plugins: {
-                                legend: { display: true }
-                            },
-                            scales: {
-                                y: { beginAtZero: true }
-                            }
-                        }
-                    });
-                    
-                    // Gráfico de TPS
-                    if (tpsChart) tpsChart.destroy();
-                    tpsChart = new Chart(document.getElementById('tpsChart'), {
-                        type: 'line',
-                        data: {
-                            labels: labels,
-                            datasets: [{
-                                label: 'TPS',
-                                data: data.data.tps,
-                                borderColor: '#17a2b8',
-                                backgroundColor: 'rgba(23, 162, 184, 0.1)',
-                                tension: 0.4
-                            }]
-                        },
-                        options: {
-                            responsive: true,
-                            maintainAspectRatio: false,
-                            plugins: {
-                                legend: { display: true }
-                            },
-                            scales: {
-                                y: { beginAtZero: true, max: 20 }
-                            }
-                        }
-                    });
-                }
-            })
-            .catch(error => {
-                console.error('Error cargando estadísticas históricas:', error);
-            });
-    }
-    
-    if (serverId) {
-        updateStats();
-        loadHistoricalStats();
-        // Actualizar cada 5 segundos
-        setInterval(updateStats, 5000);
-        // Actualizar gráficos cada minuto
-        setInterval(loadHistoricalStats, 60000);
-    }
-</script>
+<div class="card">
+    <h2>Acciones Rápidas</h2>
+    <a href="/control/?server_id={{ server.id }}" class="btn">Control del Servidor</a>
+    <a href="/players/?server_id={{ server.id }}" class="btn">Gestionar Jugadores</a>
+    <a href="/mods/?server_id={{ server.id }}" class="btn">Gestionar Mods</a>
+    <a href="/settings/?server_id={{ server.id }}" class="btn">Configuración</a>
+</div>
+{% else %}
+<div class="card">
+    <div class="empty-state">
+        <h3>No hay servidor seleccionado</h3>
+        <p>Selecciona un servidor desde el menú desplegable en la parte superior.</p>
+    </div>
+</div>
+{% endif %}
+
+{% if available_servers %}
+<div class="card">
+    <h2>Servidores Disponibles</h2>
+    <p>Total: {{ available_servers|length }} servidor{{ available_servers|length|pluralize:"es" }}</p>
+</div>
+{% endif %}
 {% endblock %}

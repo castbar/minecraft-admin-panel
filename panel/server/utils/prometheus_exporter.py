@@ -1,5 +1,5 @@
 from prometheus_client import Counter, Gauge, Histogram, start_http_server
-from .models import Server, ServerStatistic
+from ..models import Server, ServerStatistic
 import time
 import threading
 

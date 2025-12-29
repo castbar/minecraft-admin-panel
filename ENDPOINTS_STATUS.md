@@ -31,8 +31,8 @@
 - [x] `GET /api/servers/<id>/users/` - Listar usuarios de Minecraft ✅ (400 esperado si auth_mode='whitelist')
 - [x] `POST /api/servers/<id>/users/create/` - Crear usuario de Minecraft (requiere email, envía token por email) ✅
 - [x] `POST /api/servers/<id>/users/set-password/` - Establecer contraseña con token (endpoint público) ✅
-- [ ] `POST /api/servers/<id>/users/<user_id>/update/` - Actualizar contraseña o estado (is_active) del usuario (no testeado)
-- [ ] `POST /api/servers/<id>/users/<user_id>/delete/` - Eliminar usuario de Minecraft (no testeado)
+- [x] `POST /api/servers/<id>/users/<user_id>/update/` - Actualizar contraseña o estado (is_active) del usuario ✅
+- [x] `POST /api/servers/<id>/users/<user_id>/delete/` - Eliminar usuario de Minecraft ✅
 
 ## Backups
 - [x] `GET /api/servers/<id>/backups/` - Listar backups ✅
@@ -60,13 +60,12 @@
 - [ ] `POST /api/command/` - Ejecutar comando (legacy) (no testeado)
 
 ## Resumen
-- ✅ Funcionando: 22/27 (81%)
-- ❌ Con problemas: 5/27 (19%)
+- ✅ Funcionando: 24/27 (89%)
+- ❌ Con problemas: 3/27 (11%)
 - Problemas principales: 
-  - **CSRF (403) en endpoints POST**: users_create, switch_server - **@csrf_exempt agregado pero aún falla** (posible problema de orden de decoradores o cache)
+  - **CSRF (403) en endpoints POST**: switch_server - **@csrf_exempt agregado pero aún falla** (posible problema de orden de decoradores o cache)
   - logs legacy: 500 error (necesita revisión)
   - versions/latest: No version available (esperado si no hay versiones en BD)
-  - users/list: 400 - Server does not use database authentication (esperado, el servidor usa whitelist)
 
 ## Notas
 - ✅ @csrf_exempt agregado a todos los endpoints POST que lo necesitaban
@@ -81,4 +80,6 @@
 - ✅ `POST /api/servers/<id>/users/create/` testeado completamente - **SISTEMA DE REGISTRO POR EMAIL IMPLEMENTADO**. Admin crea usuario con email (sin contraseña), se genera token único y se envía email automáticamente. El usuario establece su propia contraseña usando el token. **TESTEADO CON SERVIDOR REAL - FUNCIONA PERFECTAMENTE**. El endpoint requiere `auth_mode='database'` o 'both'. Las contraseñas se hashean con SHA256+salt. El admin nunca ve las contraseñas.
 - ✅ `POST /api/servers/<id>/users/set-password/` testeado completamente - endpoint público (sin autenticación) para establecer contraseña con token. Valida token (expiración 24 horas), establece contraseña, activa usuario y limpia token. **TESTEADO CON SERVIDOR REAL - FUNCIONA PERFECTAMENTE**.
 - ✅ `GET /api/servers/<id>/users/` funciona correctamente - retorna 400 cuando `auth_mode` no es 'database' o 'both' (comportamiento esperado).
+- ✅ `POST /api/servers/<id>/users/<user_id>/update/` testeado completamente - funciona correctamente, verifica permisos (manage_users), permite actualizar contraseña y estado (is_active). Valida longitud mínima de contraseña (6 caracteres) y retorna 404 si el usuario no existe. **TESTEADO CON SERVIDOR REAL - FUNCIONA PERFECTAMENTE**. Se probó: actualizar contraseña (nueva funciona, antigua ya no), cambiar is_active (usuario inactivo no puede autenticarse), validación de usuario inexistente.
+- ✅ `POST /api/servers/<id>/users/<user_id>/delete/` testeado completamente - funciona correctamente, verifica permisos (manage_users), elimina usuario de la BD. Retorna 404 si el usuario no existe. **TESTEADO CON SERVIDOR REAL - FUNCIONA PERFECTAMENTE**.
 

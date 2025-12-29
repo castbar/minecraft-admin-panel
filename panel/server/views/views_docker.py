@@ -14,6 +14,7 @@ from ..utils.docker_control import (
     get_container_info
 )
 from ..utils.notifications import send_notification
+from ..utils.permissions import _get_server_id_from_request
 
 def _check_server_permission(request, server_id, permission_needed):
     """Helper para verificar permisos"""
@@ -157,9 +158,17 @@ def create_server(request):
 
 @login_required
 @require_http_methods(["GET"])
-def container_info(request, server_id):
-    """Obtener información detallada del contenedor Docker"""
-    server, error_response = _check_server_permission(request, server_id, 'view')
+def container_info(request, server_id=None):
+    """Obtener información detallada del contenedor Docker - Requiere header X-Server-ID"""
+    # Obtener server_id del header (método principal) o de la URL (compatibilidad)
+    resolved_server_id = _get_server_id_from_request(request) or server_id
+    if not resolved_server_id:
+        return JsonResponse({
+            'success': False, 
+            'error': 'Server ID required. Send header X-Server-ID: <id>'
+        }, status=400)
+    
+    server, error_response = _check_server_permission(request, resolved_server_id, 'view')
     if error_response:
         return error_response
     

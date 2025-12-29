@@ -13,6 +13,7 @@ from ..utils.docker_control import (
     pause_container, unpause_container, get_container_status,
     create_container_from_compose, get_container_info
 )
+from ..utils.permissions import _get_server_id_from_request
 from django.utils import timezone
 from datetime import timedelta
 import docker
@@ -498,9 +499,6 @@ def whitelist_list(request, server_id=None):
             return JsonResponse({'success': True, 'data': []})
     except Exception as e:
         return JsonResponse({'success': False, 'error': str(e)}, status=500)
-
-# Importar helper común desde utils
-from ..utils.permissions import _get_server_id_from_request
 
 @csrf_exempt
 @login_required

@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 import mcrcon
 from django.conf import settings
+from ..utils.permissions import _get_server_id_from_request
 
 def dashboard(request):
     """Panel principal - Detectar servidor automáticamente o mostrar selector"""
@@ -241,9 +242,6 @@ def whitelist_action(request, action):
                 pass
     except Exception as e:
         return JsonResponse({'success': False, 'error': f'RCON error: {str(e)}'})
-
-# Importar helper común desde utils
-from ..utils.permissions import _get_server_id_from_request
 
 @login_required
 @require_http_methods(["GET"])

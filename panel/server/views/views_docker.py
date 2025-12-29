@@ -4,6 +4,7 @@ Vistas para crear y gestionar contenedores Docker desde Django
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
+from django.views.decorators.csrf import csrf_exempt
 from django.shortcuts import get_object_or_404
 import json
 from ..models import Server, UserServerRole
@@ -119,10 +120,28 @@ def create_server(request):
         
         send_notification(server, 'server_created', f"Servidor '{server.name}' creado correctamente")
         
+        # Retornar información completa del servidor creado (mantener server_id para compatibilidad)
         return JsonResponse({
             'success': True,
             'message': f'Servidor {server.name} creado correctamente',
-            'server_id': server.id,
+            'server_id': server.id,  # Mantener para compatibilidad
+            'data': {
+                'id': server.id,
+                'name': server.name,
+                'host': server.host,
+                'container_name': server.container_name,
+                'rcon_port': server.rcon_port,
+                'minecraft_data_path': server.minecraft_data_path,
+                'is_active': server.is_active,
+                'is_public': server.is_public,
+                'is_hidden': server.is_hidden,
+                'auth_mode': server.auth_mode,
+                'enable_whitelist': server.enable_whitelist,
+                'online_mode': server.online_mode,
+                'server_type': server.server_type,
+                'minecraft_version': server.minecraft_version,
+                'role': 'admin',  # El usuario que crea el servidor siempre tiene rol admin
+            }
         })
         
     except json.JSONDecodeError:

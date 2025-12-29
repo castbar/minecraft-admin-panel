@@ -10,7 +10,7 @@ YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
 # Variables
-REGISTRY="${DOCKER_REGISTRY:-registry.example.com}"
+REGISTRY="${DOCKER_REGISTRY:-registry.castbar.dev}"
 NAMESPACE="castbar"
 IMAGE_NAME="minecraft-admin-panel"
 TAG="${1:-lts}"  # Usar tag pasado como argumento o 'lts' por defecto

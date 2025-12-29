@@ -194,9 +194,12 @@ class MinecraftUser(models.Model):
     """Usuarios de Minecraft para autenticación en base de datos"""
     server = models.ForeignKey(Server, on_delete=models.CASCADE, related_name='minecraft_users')
     username = models.CharField(max_length=16, validators=[MinLengthValidator(3)])
-    password_hash = models.CharField(max_length=255)  # Hash de la contraseña
-    salt = models.CharField(max_length=32)  # Salt para el hash
-    is_active = models.BooleanField(default=True)
+    email = models.EmailField(null=True, blank=True, help_text="Email del usuario para envío de token de contraseña")
+    password_hash = models.CharField(max_length=255, blank=True, null=True)  # Hash de la contraseña (null hasta que se establezca)
+    salt = models.CharField(max_length=32, blank=True, null=True)  # Salt para el hash
+    is_active = models.BooleanField(default=False, help_text="Activo solo después de establecer contraseña")
+    password_set_token = models.CharField(max_length=64, blank=True, null=True, help_text="Token para establecer contraseña")
+    password_set_token_expires = models.DateTimeField(null=True, blank=True, help_text="Expiración del token (24 horas)")
     last_login = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -218,17 +221,52 @@ class MinecraftUser(models.Model):
     
     def check_password(self, raw_password):
         """Verificar contraseña"""
+        if not self.password_hash or not self.salt:
+            return False  # Usuario no tiene contraseña establecida
         password_with_salt = f"{raw_password}{self.salt}"
         password_hash = hashlib.sha256(password_with_salt.encode()).hexdigest()
         return password_hash == self.password_hash
+    
+    def generate_password_set_token(self):
+        """Generar token para establecer contraseña"""
+        from django.utils import timezone
+        from datetime import timedelta
+        import secrets
+        
+        self.password_set_token = secrets.token_urlsafe(32)
+        self.password_set_token_expires = timezone.now() + timedelta(hours=24)
+        self.save(update_fields=['password_set_token', 'password_set_token_expires'])
+        return self.password_set_token
+    
+    def is_password_set_token_valid(self, token):
+        """Verificar si el token es válido"""
+        from django.utils import timezone
+        
+        if not self.password_set_token or not self.password_set_token_expires:
+            return False
+        
+        if self.password_set_token != token:
+            return False
+        
+        if timezone.now() > self.password_set_token_expires:
+            return False
+        
+        return True
+    
+    def has_password_set(self):
+        """Verificar si el usuario ya tiene contraseña establecida"""
+        return bool(self.password_hash and self.salt)
     
     @classmethod
     def authenticate(cls, server, username, password):
         """Autenticar usuario de Minecraft"""
         try:
             user = cls.objects.get(server=server, username=username, is_active=True)
+            if not user.has_password_set():
+                return None  # Usuario no ha establecido contraseña aún
             if user.check_password(password):
-                user.last_login = models.DateTimeField(auto_now=True)
+                from django.utils import timezone
+                user.last_login = timezone.now()
                 user.save(update_fields=['last_login'])
                 return user
         except cls.DoesNotExist:

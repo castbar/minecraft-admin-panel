@@ -81,6 +81,7 @@ urlpatterns = [
         # Usuarios de Minecraft
         path('servers/<int:server_id>/users/', views_settings.minecraft_users_list, name='minecraft_users_list'),
         path('servers/<int:server_id>/users/create/', views_settings.minecraft_user_create, name='minecraft_user_create'),
+        path('servers/<int:server_id>/users/set-password/', views_settings.minecraft_user_set_password, name='minecraft_user_set_password'),
         path('servers/<int:server_id>/users/<int:user_id>/update/', views_settings.minecraft_user_update, name='minecraft_user_update'),
         path('servers/<int:server_id>/users/<int:user_id>/delete/', views_settings.minecraft_user_delete, name='minecraft_user_delete'),
         

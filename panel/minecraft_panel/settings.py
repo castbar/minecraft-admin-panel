@@ -158,3 +158,19 @@ CORS_ALLOWED_ORIGINS = [
 CORS_ALLOW_ALL_ORIGINS = os.environ.get('CORS_ALLOW_ALL', 'False') == 'True'  # Solo en desarrollo
 CORS_ALLOW_CREDENTIALS = True  # Permitir cookies para autenticación por sesión
 
+# Email Configuration
+# Por defecto usar console backend para desarrollo (imprime emails en consola)
+# Para producción, configurar EMAIL_BACKEND=smtp en variables de entorno
+EMAIL_BACKEND = os.environ.get('EMAIL_BACKEND', 'django.core.mail.backends.console.EmailBackend')
+EMAIL_HOST = os.environ.get('EMAIL_HOST', 'smtp.gmail.com')
+EMAIL_PORT = int(os.environ.get('EMAIL_PORT', '587'))
+EMAIL_USE_TLS = os.environ.get('EMAIL_USE_TLS', 'True') == 'True'
+EMAIL_USE_SSL = os.environ.get('EMAIL_USE_SSL', 'False') == 'True'
+EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', '')
+EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
+DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', EMAIL_HOST_USER or 'noreply@minecraft-panel.local')
+SERVER_EMAIL = DEFAULT_FROM_EMAIL
+
+# URL base para links en emails (usado en templates)
+SITE_URL = os.environ.get('SITE_URL', 'http://localhost:8000')
+

@@ -205,12 +205,51 @@ def minecraft_users_list(request, server_id):
         'data': list(users)
     })
 
+def _send_password_set_email(user, token):
+    """Enviar email con token para establecer contraseña"""
+    from django.core.mail import send_mail
+    from django.conf import settings
+    from django.template.loader import render_to_string
+    
+    try:
+        # Construir URL para establecer contraseña
+        site_url = getattr(settings, 'SITE_URL', 'http://localhost:8000')
+        set_password_url = f"{site_url}/api/servers/{user.server.id}/users/set-password/?token={token}"
+        
+        # Renderizar template de email
+        context = {
+            'username': user.username,
+            'server_name': user.server.name,
+            'set_password_url': set_password_url,
+            'token': token,
+            'expires_hours': 24,
+        }
+        
+        subject = f'Establece tu contraseña - {user.server.name}'
+        message = render_to_string('emails/password_set_invitation.txt', context)
+        html_message = render_to_string('emails/password_set_invitation.html', context) if os.path.exists(os.path.join(settings.BASE_DIR, 'templates', 'emails', 'password_set_invitation.html')) else None
+        
+        send_mail(
+            subject=subject,
+            message=message,
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[user.email],
+            html_message=html_message,
+            fail_silently=False,
+        )
+        return True
+    except Exception as e:
+        print(f"Error enviando email: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
 @csrf_exempt
 @login_required
 @require_server_permission('manage_users')
 @require_http_methods(["POST"])
 def minecraft_user_create(request, server_id):
-    """Crear usuario de Minecraft"""
+    """Crear usuario de Minecraft - Admin crea usuario y se envía email para establecer contraseña"""
     server = request.server
     
     if server.auth_mode not in ['database', 'both']:
@@ -221,7 +260,8 @@ def minecraft_user_create(request, server_id):
     
     data = json.loads(request.body)
     username = data.get('username', '').strip()
-    password = data.get('password', '')
+    email = data.get('email', '').strip()
+    password = data.get('password', '')  # Opcional, para casos especiales
     
     if not username or len(username) < 3:
         return JsonResponse({
@@ -229,10 +269,17 @@ def minecraft_user_create(request, server_id):
             'error': 'Username must be at least 3 characters'
         }, status=400)
     
-    if not password or len(password) < 6:
+    if not email:
         return JsonResponse({
             'success': False,
-            'error': 'Password must be at least 6 characters'
+            'error': 'Email is required'
+        }, status=400)
+    
+    # Validar formato de email básico
+    if '@' not in email or '.' not in email.split('@')[1]:
+        return JsonResponse({
+            'success': False,
+            'error': 'Invalid email format'
         }, status=400)
     
     if MinecraftUser.objects.filter(server=server, username=username).exists():
@@ -241,17 +288,41 @@ def minecraft_user_create(request, server_id):
             'error': 'Username already exists'
         }, status=400)
     
-    user = MinecraftUser(server=server, username=username)
-    user.set_password(password)
+    # Crear usuario (sin contraseña inicialmente)
+    user = MinecraftUser(server=server, username=username, email=email, is_active=False)
+    
+    # Si se proporciona password (caso especial), establecerlo directamente
+    if password:
+        if len(password) < 6:
+            return JsonResponse({
+                'success': False,
+                'error': 'Password must be at least 6 characters'
+            }, status=400)
+        user.set_password(password)
+        user.is_active = True
+    else:
+        # Generar token para establecer contraseña
+        token = user.generate_password_set_token()
+        
+        # Enviar email con token
+        email_sent = _send_password_set_email(user, token)
+        if not email_sent:
+            return JsonResponse({
+                'success': False,
+                'error': 'Failed to send email. Please check email configuration.'
+            }, status=500)
+    
     user.save()
     
     return JsonResponse({
         'success': True,
-        'message': f'User {username} created',
+        'message': f'User {username} created. Email sent to {email}' if not password else f'User {username} created',
         'data': {
             'id': user.id,
             'username': user.username,
+            'email': user.email,
             'is_active': user.is_active,
+            'has_password_set': user.has_password_set(),
         }
     })
 
@@ -289,6 +360,86 @@ def minecraft_user_update(request, server_id, user_id):
     return JsonResponse({
         'success': True,
         'message': f'User {user.username} updated',
+        'data': {
+            'id': user.id,
+            'username': user.username,
+            'is_active': user.is_active,
+        }
+    })
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def minecraft_user_set_password(request, server_id):
+    """Endpoint público para establecer contraseña usando token (sin autenticación requerida)"""
+    from django.shortcuts import get_object_or_404
+    from django.utils import timezone
+    
+    try:
+        server = Server.objects.get(id=server_id, is_active=True)
+    except Server.DoesNotExist:
+        return JsonResponse({
+            'success': False,
+            'error': 'Server not found'
+        }, status=404)
+    
+    if server.auth_mode not in ['database', 'both']:
+        return JsonResponse({
+            'success': False,
+            'error': 'Server does not use database authentication'
+        }, status=400)
+    
+    data = json.loads(request.body)
+    token = data.get('token', '').strip()
+    password = data.get('password', '')
+    
+    if not token:
+        return JsonResponse({
+            'success': False,
+            'error': 'Token is required'
+        }, status=400)
+    
+    if not password:
+        return JsonResponse({
+            'success': False,
+            'error': 'Password is required'
+        }, status=400)
+    
+    if len(password) < 6:
+        return JsonResponse({
+            'success': False,
+            'error': 'Password must be at least 6 characters'
+        }, status=400)
+    
+    # Buscar usuario por token
+    try:
+        user = MinecraftUser.objects.get(
+            server=server,
+            password_set_token=token,
+            password_set_token_expires__gt=timezone.now()
+        )
+    except MinecraftUser.DoesNotExist:
+        return JsonResponse({
+            'success': False,
+            'error': 'Invalid or expired token'
+        }, status=400)
+    
+    # Verificar que el token es válido
+    if not user.is_password_set_token_valid(token):
+        return JsonResponse({
+            'success': False,
+            'error': 'Invalid or expired token'
+        }, status=400)
+    
+    # Establecer contraseña
+    user.set_password(password)
+    user.is_active = True
+    user.password_set_token = None
+    user.password_set_token_expires = None
+    user.save()
+    
+    return JsonResponse({
+        'success': True,
+        'message': 'Password set successfully. Your account is now active.',
         'data': {
             'id': user.id,
             'username': user.username,

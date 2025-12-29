@@ -46,8 +46,10 @@
 - [x] `POST /api/minecraft/versions/create/` - Crear nueva versión ✅
 
 ## Multi-servidor
-- [ ] `POST /api/servers/switch/` - Cambiar servidor activo ❌ (403 - CSRF)
-- [x] `GET /api/servers/sessions/` - Sesiones guardadas ✅
+**Nota:** "Servidor activo" NO significa que solo un servidor esté ejecutándose. Significa **qué servidor está seleccionado actualmente en el panel web** para el usuario. **Todos los servidores pueden ejecutarse simultáneamente**, cada uno con su propio puerto (configurado en `server.properties`). Los jugadores se conectan directamente usando `IP:PUERTO` de cada servidor.
+
+- [ ] `POST /api/servers/switch/` - Cambiar servidor seleccionado en el panel (solo afecta qué datos se muestran, NO qué servidores están ejecutándose) ❌ (403 - CSRF)
+- [x] `GET /api/servers/sessions/` - Sesiones guardadas (historial de servidores usados por el usuario) ✅
 - [x] `GET /api/security/logs/` - Logs de seguridad ✅
 
 ## Legacy (Compatibilidad)

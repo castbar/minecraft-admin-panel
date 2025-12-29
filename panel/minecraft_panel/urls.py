@@ -8,7 +8,7 @@ from django.views.static import serve
 from django.http import FileResponse, Http404
 from pathlib import Path
 import os
-from server.views import views, views_api, views_settings, views_backup, views_auth, views_docker, views_pages, views_versions
+from server.views import views, views_api, views_settings, views_backup, views_auth, views_docker, views_pages, views_versions, views_mods
 
 # Ruta al frontend compilado (si existe)
 FRONTEND_DIST = Path(__file__).resolve().parent.parent.parent / 'frontend' / 'dist'
@@ -62,6 +62,13 @@ urlpatterns = [
         path('players/', views.players_api, name='players_api'),
         path('logs/', views.logs_api, name='logs_api'),
         path('command/', views.command_api, name='command_api'),
+        
+        # API de mods (nueva estructura)
+        path('servers/<int:server_id>/mods/', views_mods.mods_list, name='mods_list'),
+        path('servers/<int:server_id>/mods/upload/', views_mods.mod_upload, name='mod_upload'),
+        path('servers/<int:server_id>/mods/enable/', views_mods.mod_enable, name='mod_enable'),
+        path('servers/<int:server_id>/mods/disable/', views_mods.mod_disable, name='mod_disable'),
+        path('servers/<int:server_id>/mods/delete/', views_mods.mod_delete, name='mod_delete'),
         
         # API nueva (multi-servidor con roles)
         path('servers/', views_api.servers_list, name='servers_list'),

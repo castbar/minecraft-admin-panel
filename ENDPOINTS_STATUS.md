@@ -17,6 +17,13 @@
 - [x] `POST /api/servers/<id>/whitelist/add/` - Agregar usuario a whitelist ✅
 - [x] `POST /api/servers/<id>/whitelist/remove/` - Eliminar usuario de whitelist ✅
 
+## Mods
+- [x] `GET /api/servers/<id>/mods/` - Listar mods (muestra habilitados y deshabilitados) ✅
+- [x] `POST /api/servers/<id>/mods/upload/` - Subir nuevo mod ✅
+- [x] `POST /api/servers/<id>/mods/enable/` - Habilitar mod (mueve de mods-disabled/ a mods/) ✅
+- [x] `POST /api/servers/<id>/mods/disable/` - Deshabilitar mod (mueve de mods/ a mods-disabled/) ✅
+- [x] `POST /api/servers/<id>/mods/delete/` - Eliminar mod completamente ✅
+
 ## Configuración
 - [x] `GET /api/servers/<id>/settings/` - Obtener configuración del servidor ✅
 - [x] `POST /api/servers/<id>/settings/update/` - Actualizar configuración ✅
@@ -78,8 +85,8 @@
 - [x] `POST /api/command/` - Ejecutar comando (legacy) ✅ (requiere `server_id`)
 
 ## Resumen
-- ✅ Funcionando: 28/28 (100%)
-- ❌ Con problemas: 0/28 (0%)
+- ✅ Funcionando: 33/33 (100%)
+- ❌ Con problemas: 0/33 (0%)
 - Problemas principales: 
   - Ninguno - Todos los endpoints principales funcionan correctamente ✅
   - **Nota**: `POST /api/servers/switch/` tiene problema de CSRF pero no es crítico

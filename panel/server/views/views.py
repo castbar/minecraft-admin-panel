@@ -121,7 +121,13 @@ def dashboard(request):
             'is_favorite': session.is_favorite,
         })
     
-    return render(request, 'panel/dashboard.html', context)
+    # NOTA: Esta función ya no se usa - el frontend Ionic maneja el dashboard
+    # Se mantiene por compatibilidad pero nunca se llama desde urls.py
+    from django.http import JsonResponse
+    return JsonResponse({
+        'message': 'Dashboard view deprecated - use frontend Ionic',
+        'servers': context['available_servers']
+    })
 
 def _detect_server_from_request(request):
     """Detectar servidor desde la request (hostname/IP)"""

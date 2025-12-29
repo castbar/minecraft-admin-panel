@@ -6,6 +6,7 @@ from django.urls import path, include, re_path
 from django.contrib.auth import views as auth_views
 from django.views.static import serve
 from django.http import FileResponse, Http404
+from django.shortcuts import redirect
 from pathlib import Path
 import os
 from server.views import views, views_api, views_settings, views_backup, views_auth, views_docker, views_versions, views_mods, views_mods_config, views_mods_config_simple, views_mods_pool

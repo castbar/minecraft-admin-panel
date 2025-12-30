@@ -19,6 +19,9 @@ export interface Server {
   is_active?: boolean;
   created_at?: string;
   updated_at?: string;
+  auth_mode?: 'whitelist' | 'database' | 'both' | 'public';
+  enable_whitelist?: boolean;
+  online_mode?: boolean;
 }
 
 export interface ServerStatus {

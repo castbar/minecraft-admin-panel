@@ -1,6 +1,6 @@
 <ion-header>
   <ion-toolbar>
-    <ion-title>Jugadores</ion-title>
+    <ion-title>{{ displayTitle }}</ion-title>
   </ion-toolbar>
 </ion-header>
 
@@ -52,10 +52,11 @@
       <ion-icon name="person-outline" size="large"></ion-icon>
       <h2>No hay jugadores</h2>
       <p *ngIf="searchTerm">No se encontraron jugadores que coincidan con la búsqueda</p>
-      <p *ngIf="!searchTerm">Crea tu primer jugador usando el botón +</p>
+      <p *ngIf="!searchTerm && canCreateUser()">Crea tu primer jugador usando el botón +</p>
+      <p *ngIf="!searchTerm && !canCreateUser() && authMode === 'whitelist'">Agrega jugadores a la whitelist desde el servidor</p>
     </div>
 
-    <ion-list *ngIf="filteredUsers.length > 0" style="max-height: calc(100vh - 400px); overflow-y: auto;">
+    <ion-list *ngIf="filteredUsers.length > 0" class="players-list-container">
       <ion-item *ngFor="let user of filteredUsers" lines="full">
         <ion-icon name="person-outline" slot="start" color="primary"></ion-icon>
         <ion-label>
@@ -90,10 +91,27 @@
               slot="icon-only">
             </ion-icon>
           </ion-button>
-          <ion-button fill="clear" size="small" (click)="openEditModal(user)">
+          <ion-button 
+            *ngIf="canEditUser(user)"
+            fill="clear" 
+            size="small" 
+            (click)="openEditModal(user)">
             <ion-icon name="create-outline" slot="icon-only"></ion-icon>
           </ion-button>
-          <ion-button fill="clear" size="small" color="danger" (click)="deleteUser(user)">
+          <ion-button 
+            *ngIf="canDeleteUser(user)"
+            fill="clear" 
+            size="small" 
+            color="danger" 
+            (click)="deleteUser(user)">
+            <ion-icon name="trash-outline" slot="icon-only"></ion-icon>
+          </ion-button>
+          <ion-button 
+            *ngIf="authMode === 'whitelist'"
+            fill="clear" 
+            size="small" 
+            color="danger" 
+            (click)="removeFromWhitelist(user.username)">
             <ion-icon name="trash-outline" slot="icon-only"></ion-icon>
           </ion-button>
         </div>
@@ -167,7 +185,7 @@
     </ng-template>
   </ion-modal>
 
-  <ion-fab vertical="bottom" horizontal="end" slot="fixed">
+  <ion-fab *ngIf="canCreateUser()" vertical="bottom" horizontal="end" slot="fixed">
     <ion-fab-button (click)="isCreateModalOpen = true">
       <ion-icon name="add-outline"></ion-icon>
     </ion-fab-button>

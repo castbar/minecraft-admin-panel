@@ -57,10 +57,6 @@ export const routes: Routes = [
         loadComponent: () => import('./features/settings/settings/settings.page').then(m => m.SettingsPage),
       },
       {
-        path: 'whitelist',
-        loadComponent: () => import('./features/servers/whitelist/whitelist.page').then(m => m.WhitelistPage),
-      },
-      {
         path: 'users',
         loadComponent: () => import('./features/settings/user-management/user-management.page').then(m => m.UserManagementPage),
       },

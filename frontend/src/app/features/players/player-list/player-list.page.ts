@@ -44,6 +44,7 @@ import {
 import { MinecraftUserService } from '../services/minecraft-user.service';
 import { WhitelistService } from '../../servers/services/whitelist.service';
 import { PlayersOnlineService } from '../../servers/services/players-online.service';
+import { ServerService } from '../../servers/services/server.service';
 import { AuthService } from '../../../core/services/auth.service';
 import { ToastService } from '../../../core/services/toast.service';
 import { MinecraftUser } from '../../../shared/models';
@@ -87,6 +88,7 @@ export class PlayerListPage implements OnInit, OnDestroy {
   users: MinecraftUser[] = [];
   filteredUsers: MinecraftUser[] = [];
   whitelist: string[] = [];
+  whitelistData: Array<{name: string, uuid: string}> = [];
   onlinePlayers: string[] = [];
   playerCount = 0;
   maxPlayers = 20;
@@ -95,6 +97,7 @@ export class PlayerListPage implements OnInit, OnDestroy {
   isCreateModalOpen = false;
   isEditModalOpen = false;
   selectedUser: MinecraftUser | null = null;
+  authMode: 'whitelist' | 'database' | 'both' | 'public' = 'whitelist';
   private playersSubscription?: Subscription;
 
   newUser = {
@@ -114,6 +117,7 @@ export class PlayerListPage implements OnInit, OnDestroy {
     private userService: MinecraftUserService,
     private whitelistService: WhitelistService,
     private playersOnlineService: PlayersOnlineService,
+    private serverService: ServerService,
     private authService: AuthService,
     private toast: ToastService,
     private alertController: AlertController,
@@ -134,8 +138,7 @@ export class PlayerListPage implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
-    this.loadUsers();
-    this.loadWhitelist();
+    this.loadServerSettings();
     this.loadOnlinePlayers();
     // Actualizar jugadores online cada 5 segundos
     this.playersSubscription = interval(5000).subscribe(() => {
@@ -149,7 +152,7 @@ export class PlayerListPage implements OnInit, OnDestroy {
     }
   }
 
-  loadUsers(): void {
+  loadServerSettings(): void {
     const serverId = this.authService.currentServerId;
     if (!serverId) {
       this.toast.warning('Selecciona un servidor primero');
@@ -158,11 +161,39 @@ export class PlayerListPage implements OnInit, OnDestroy {
     }
 
     this.loading = true;
+    this.serverService.getServerSettings(serverId).subscribe({
+      next: (settings: any) => {
+        this.authMode = settings.auth_mode || 'whitelist';
+        // Cargar datos según el modo de autenticación
+        if (this.authMode === 'whitelist') {
+          this.loadWhitelist();
+        } else if (this.authMode === 'database' || this.authMode === 'both') {
+          this.loadUsers();
+        } else {
+          // Modo público - no hay lista
+          this.loading = false;
+        }
+      },
+      error: (error) => {
+        this.toast.error('Error al cargar configuración del servidor');
+        this.loading = false;
+      }
+    });
+  }
+
+  loadUsers(): void {
+    const serverId = this.authService.currentServerId;
+    if (!serverId) return;
+
     this.userService.getUsers(serverId).subscribe({
       next: (users) => {
         this.users = users;
         this.filteredUsers = users;
         this.loading = false;
+        // Si es modo 'both', también cargar whitelist
+        if (this.authMode === 'both') {
+          this.loadWhitelist();
+        }
       },
       error: (error) => {
         this.toast.error('Error al cargar usuarios');
@@ -187,6 +218,31 @@ export class PlayerListPage implements OnInit, OnDestroy {
       user.username.toLowerCase().includes(term) ||
       (user.email && user.email.toLowerCase().includes(term))
     );
+  }
+
+  get displayTitle(): string {
+    if (this.authMode === 'whitelist') {
+      return 'Lista Blanca';
+    } else if (this.authMode === 'database') {
+      return 'Usuarios Registrados';
+    } else if (this.authMode === 'both') {
+      return 'Usuarios y Lista Blanca';
+    }
+    return 'Jugadores';
+  }
+
+  canCreateUser(): boolean {
+    return this.authMode === 'database' || this.authMode === 'both';
+  }
+
+  canEditUser(user: MinecraftUser): boolean {
+    return (this.authMode === 'database' || this.authMode === 'both') && 
+           user.source !== 'whitelist';
+  }
+
+  canDeleteUser(user: MinecraftUser): boolean {
+    return (this.authMode === 'database' || this.authMode === 'both') && 
+           user.source !== 'whitelist';
   }
 
   async createUser(): Promise<void> {
@@ -214,6 +270,10 @@ export class PlayerListPage implements OnInit, OnDestroy {
         this.isCreateModalOpen = false;
         this.resetNewUser();
         this.loadUsers();
+        // Recargar whitelist si es modo both
+        if (this.authMode === 'both') {
+          this.loadWhitelist();
+        }
       },
       error: (error) => {
         loading.dismiss();
@@ -256,6 +316,10 @@ export class PlayerListPage implements OnInit, OnDestroy {
         this.isEditModalOpen = false;
         this.selectedUser = null;
         this.loadUsers();
+        // Recargar whitelist si es modo both
+        if (this.authMode === 'both') {
+          this.loadWhitelist();
+        }
       },
       error: (error) => {
         loading.dismiss();
@@ -322,10 +386,37 @@ export class PlayerListPage implements OnInit, OnDestroy {
 
     this.whitelistService.getWhitelist(serverId).subscribe({
       next: (response: any) => {
-        this.whitelist = response.data || response || [];
+        const data = response.data || response || [];
+        // Si es array de objetos {name, uuid}, extraer solo nombres
+        if (Array.isArray(data) && data.length > 0 && typeof data[0] === 'object' && 'name' in data[0]) {
+          this.whitelistData = data;
+          this.whitelist = data.map((item: any) => item.name || item);
+        } else {
+          // Si es array de strings
+          this.whitelist = data;
+          this.whitelistData = data.map((name: string) => ({ name, uuid: '' }));
+        }
+        // Si es modo whitelist, usar whitelist como lista principal
+        if (this.authMode === 'whitelist') {
+          this.users = this.whitelistData.map((item, idx) => ({
+            id: idx + 1,
+            username: item.name,
+            email: '',
+            is_active: true,
+            is_operator: false,
+            last_login: null,
+            created_at: null,
+            source: 'whitelist'
+          } as MinecraftUser));
+          this.filteredUsers = this.users;
+          this.loading = false;
+        }
       },
       error: () => {
         // Ignorar error
+        if (this.authMode === 'whitelist') {
+          this.loading = false;
+        }
       }
     });
   }
@@ -393,6 +484,10 @@ export class PlayerListPage implements OnInit, OnDestroy {
       next: () => {
         this.toast.success(`${username} agregado a la whitelist`);
         this.loadWhitelist();
+        // Si es modo both, recargar usuarios también
+        if (this.authMode === 'both') {
+          this.loadUsers();
+        }
       },
       error: (error: any) => {
         this.toast.error(error.message || 'Error al agregar a whitelist');
@@ -400,14 +495,40 @@ export class PlayerListPage implements OnInit, OnDestroy {
     });
   }
 
-  private removeFromWhitelist(username: string): void {
+  async removeFromWhitelist(username: string): Promise<void> {
+    const alert = await this.alertController.create({
+      header: 'Confirmar eliminación',
+      message: `¿Estás seguro de eliminar a ${username} de la whitelist?`,
+      buttons: [
+        {
+          text: 'Cancelar',
+          role: 'cancel'
+        },
+        {
+          text: 'Eliminar',
+          role: 'destructive',
+          handler: () => {
+            this.doRemoveFromWhitelist(username);
+          }
+        }
+      ]
+    });
+    await alert.present();
+  }
+
+  private doRemoveFromWhitelist(username: string): void {
     const serverId = this.authService.currentServerId;
     if (!serverId) return;
 
     this.whitelistService.removeFromWhitelist(serverId, username).subscribe({
       next: () => {
         this.toast.success(`${username} eliminado de la whitelist`);
-        this.loadWhitelist();
+        if (this.authMode === 'whitelist') {
+          this.loadWhitelist();
+        } else {
+          this.loadWhitelist();
+          this.loadUsers();
+        }
       },
       error: (error: any) => {
         this.toast.error(error.message || 'Error al quitar de whitelist');

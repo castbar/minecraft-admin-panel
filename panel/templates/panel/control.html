@@ -1,0 +1,125 @@
+{% extends 'panel/base.html' %}
+
+{% block title %}Control del Servidor - {{ block.super }}{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>Control del Servidor: {{ server.name }}</h2>
+    <p><strong>Host:</strong> {{ server.host }}</p>
+    <p><strong>Rol:</strong> {{ user_role.role }}</p>
+</div>
+
+<div class="card">
+    <h2>Acciones de Control</h2>
+    <button class="btn" onclick="sendCommand('start')">▶️ Iniciar</button>
+    <button class="btn" onclick="sendCommand('stop')">⏹️ Detener</button>
+    <button class="btn" onclick="sendCommand('restart')">🔄 Reiniciar</button>
+    <button class="btn btn-secondary" onclick="sendCommand('pause')">⏸️ Pausar</button>
+</div>
+
+<div class="card">
+    <h2>Estado del Servidor</h2>
+    <div id="serverStatus">Cargando...</div>
+</div>
+
+<div class="card">
+    <h2>Comando RCON</h2>
+    <input type="text" id="rconCommand" placeholder="Ingresa un comando..." style="width: 70%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 5px;">
+    <button class="btn" onclick="sendRconCommand()">Enviar</button>
+    <div id="rconResponse" style="margin-top: 1rem; padding: 1rem; background: #f9f9f9; border-radius: 5px; min-height: 100px;"></div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function sendCommand(action) {
+    fetch(`/api/servers/{{ server.id }}/control/${action}/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': getCookie('csrftoken'),
+            'Content-Type': 'application/json'
+        },
+        credentials: 'same-origin'
+    })
+    .then(response => response.json())
+    .then(data => {
+        alert(data.message || data.error || 'Comando enviado');
+        updateServerStatus();
+    })
+    .catch(error => {
+        alert('Error: ' + error);
+    });
+}
+
+function sendRconCommand() {
+    const command = document.getElementById('rconCommand').value;
+    if (!command) return;
+    
+    fetch(`/api/command/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': getCookie('csrftoken'),
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            server_id: {{ server.id }},
+            command: command
+        }),
+        credentials: 'same-origin'
+    })
+    .then(response => response.json())
+    .then(data => {
+        document.getElementById('rconResponse').innerHTML = '<pre>' + (data.response || data.error || 'Sin respuesta') + '</pre>';
+    })
+    .catch(error => {
+        document.getElementById('rconResponse').innerHTML = '<pre>Error: ' + error + '</pre>';
+    });
+}
+
+function updateServerStatus() {
+    fetch(`/api/servers/{{ server.id }}/status/`)
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            const status = data.data.online ? '🟢 Online' : '🔴 Offline';
+            const playerCount = data.data.player_count || 0;
+            const maxPlayers = data.data.max_players || 0;
+            
+            document.getElementById('serverStatus').innerHTML = `
+                <p><strong>Estado:</strong> ${status}</p>
+                <p><strong>Jugadores:</strong> ${playerCount} / ${maxPlayers}</p>
+            `;
+        } else {
+            document.getElementById('serverStatus').innerHTML = `
+                <p><strong>Estado:</strong> ❌ Error al obtener estado</p>
+            `;
+        }
+    })
+    .catch(error => {
+        document.getElementById('serverStatus').innerHTML = `
+            <p><strong>Estado:</strong> ❌ Error: ${error}</p>
+        `;
+    });
+}
+
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+}
+
+// Actualizar estado al cargar
+updateServerStatus();
+setInterval(updateServerStatus, 5000);
+</script>
+{% endblock %}
+

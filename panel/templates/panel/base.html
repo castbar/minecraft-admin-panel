@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Minecraft Admin Panel{% endblock %}</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #f5f5f5;
+            color: #333;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+        }
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 1rem 1.5rem;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 1000;
+        }
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 2rem;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 1.5rem;
+        }
+        .server-selector {
+            position: relative;
+        }
+        .server-selector select {
+            background: rgba(255, 255, 255, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: white;
+            padding: 0.5rem 2rem 0.5rem 1rem;
+            border-radius: 5px;
+            font-size: 1rem;
+            cursor: pointer;
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='white' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 0.75rem center;
+        }
+        .server-selector select:hover {
+            background-color: rgba(255, 255, 255, 0.3);
+        }
+        .server-selector select option {
+            background: #667eea;
+            color: white;
+        }
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+        .user-info {
+            font-size: 0.9rem;
+        }
+        .logout-link {
+            color: white;
+            text-decoration: underline;
+            cursor: pointer;
+        }
+        .logout-link:hover {
+            opacity: 0.8;
+        }
+        .main-container {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+        .sidebar {
+            width: 250px;
+            background: white;
+            box-shadow: 2px 0 10px rgba(0,0,0,0.05);
+            padding: 1.5rem 0;
+            overflow-y: auto;
+        }
+        .sidebar-menu {
+            list-style: none;
+        }
+        .sidebar-menu li {
+            margin: 0;
+        }
+        .sidebar-menu a {
+            display: block;
+            padding: 1rem 1.5rem;
+            color: #333;
+            text-decoration: none;
+            transition: all 0.3s;
+            border-left: 3px solid transparent;
+        }
+        .sidebar-menu a:hover {
+            background: #f5f5f5;
+            border-left-color: #667eea;
+        }
+        .sidebar-menu a.active {
+            background: #f0f0ff;
+            border-left-color: #667eea;
+            color: #667eea;
+            font-weight: 600;
+        }
+        .sidebar-menu .icon {
+            margin-right: 0.75rem;
+            width: 20px;
+            display: inline-block;
+        }
+        .content {
+            flex: 1;
+            padding: 2rem;
+            overflow-y: auto;
+        }
+        .card {
+            background: white;
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .card h2 {
+            margin-bottom: 1rem;
+            color: #667eea;
+        }
+        .btn {
+            display: inline-block;
+            padding: 0.75rem 1.5rem;
+            background: #667eea;
+            color: white;
+            text-decoration: none;
+            border-radius: 5px;
+            margin-right: 0.5rem;
+            margin-top: 0.5rem;
+            transition: background 0.3s;
+            border: none;
+            cursor: pointer;
+            font-size: 1rem;
+        }
+        .btn:hover {
+            background: #5568d3;
+        }
+        .btn-secondary {
+            background: #6c757d;
+        }
+        .btn-secondary:hover {
+            background: #5a6268;
+        }
+        .btn-danger {
+            background: #dc3545;
+        }
+        .btn-danger:hover {
+            background: #c82333;
+        }
+        .empty-state {
+            text-align: center;
+            padding: 3rem;
+            color: #666;
+        }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+        .stat-card {
+            background: #f9f9f9;
+            padding: 1rem;
+            border-radius: 5px;
+            border-left: 4px solid #667eea;
+        }
+        .stat-card .label {
+            font-size: 0.9rem;
+            color: #666;
+            margin-bottom: 0.5rem;
+        }
+        .stat-card .value {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: #333;
+        }
+    </style>
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    <div class="header">
+        <div class="header-left">
+            <h1>Minecraft Admin Panel</h1>
+            <div class="server-selector">
+                <select id="serverSelect" onchange="changeServer()">
+                    <option value="">Seleccionar servidor...</option>
+                    {% for srv in available_servers %}
+                    <option value="{{ srv.id }}" {% if server.id == srv.id %}selected{% endif %}>
+                        {{ srv.name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+        <div class="header-right">
+            <div class="user-info">
+                Usuario: {{ user.username }} | 
+                <a href="/logout/" class="logout-link">Cerrar Sesión</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="main-container">
+        <nav class="sidebar">
+            <ul class="sidebar-menu">
+                <li><a href="/" {% if request.path == '/' %}class="active"{% endif %}>
+                    <span class="icon">📊</span>
+                    Dashboard
+                </a></li>
+                {% if server %}
+                <li><a href="/control/?server_id={{ server.id }}" {% if '/control' in request.path %}class="active"{% endif %}>
+                    <span class="icon">⚙️</span>
+                    Control del Servidor
+                </a></li>
+                <li><a href="/players/?server_id={{ server.id }}" {% if '/players' in request.path %}class="active"{% endif %}>
+                    <span class="icon">👥</span>
+                    Jugadores
+                </a></li>
+                <li><a href="/mods/?server_id={{ server.id }}" {% if '/mods' in request.path %}class="active"{% endif %}>
+                    <span class="icon">📦</span>
+                    Mods
+                </a></li>
+                <li><a href="/settings/?server_id={{ server.id }}" {% if '/settings' in request.path %}class="active"{% endif %}>
+                    <span class="icon">🔧</span>
+                    Configuración
+                </a></li>
+                <li><a href="/logs/?server_id={{ server.id }}" {% if '/logs' in request.path %}class="active"{% endif %}>
+                    <span class="icon">📋</span>
+                    Logs
+                </a></li>
+                {% endif %}
+            </ul>
+        </nav>
+
+        <main class="content">
+            {% block content %}{% endblock %}
+        </main>
+    </div>
+
+    <script>
+        function changeServer() {
+            const select = document.getElementById('serverSelect');
+            const serverId = select.value;
+            if (serverId) {
+                window.location.href = '/?server_id=' + serverId;
+            }
+        }
+    </script>
+    {% block extra_js %}{% endblock %}
+</body>
+</html>
+

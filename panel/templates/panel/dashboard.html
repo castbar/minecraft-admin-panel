@@ -1,0 +1,43 @@
+{% extends 'panel/base.html' %}
+
+{% block title %}Dashboard - {{ block.super }}{% endblock %}
+
+{% block content %}
+{% if server %}
+<div class="card">
+    <h2>Servidor Activo: {{ server.name }}</h2>
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="label">Host</div>
+            <div class="value">{{ server.host }}</div>
+        </div>
+        <div class="stat-card">
+            <div class="label">Rol</div>
+            <div class="value">{{ server.role }}</div>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <h2>Acciones Rápidas</h2>
+    <a href="/control/?server_id={{ server.id }}" class="btn">Control del Servidor</a>
+    <a href="/players/?server_id={{ server.id }}" class="btn">Gestionar Jugadores</a>
+    <a href="/mods/?server_id={{ server.id }}" class="btn">Gestionar Mods</a>
+    <a href="/settings/?server_id={{ server.id }}" class="btn">Configuración</a>
+</div>
+{% else %}
+<div class="card">
+    <div class="empty-state">
+        <h3>No hay servidor seleccionado</h3>
+        <p>Selecciona un servidor desde el menú desplegable en la parte superior.</p>
+    </div>
+</div>
+{% endif %}
+
+{% if available_servers %}
+<div class="card">
+    <h2>Servidores Disponibles</h2>
+    <p>Total: {{ available_servers|length }} servidor{{ available_servers|length|pluralize:"es" }}</p>
+</div>
+{% endif %}
+{% endblock %}

@@ -72,3 +72,6 @@ tmp/
 temp/
 *.tmp
 
+# Test files with sensitive data (local only)
+test.http/
+

@@ -1,0 +1,105 @@
+{% extends 'panel/base.html' %}
+
+{% block title %}Mods - {{ block.super }}{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>Gestión de Mods: {{ server.name }}</h2>
+</div>
+
+<div class="card">
+    <h2>Mods Instalados</h2>
+    <div id="modsList">Cargando...</div>
+</div>
+
+<div class="card">
+    <h2>Instalar Mod</h2>
+    <div style="margin-bottom: 1rem;">
+        <input type="file" id="modFile" accept=".jar" style="margin-bottom: 0.5rem;">
+        <button class="btn" onclick="uploadMod()">Subir Mod</button>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function loadMods() {
+    fetch(`/api/mods/?server_id={{ server.id }}`)
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            const mods = data.data.mods || [];
+            document.getElementById('modsList').innerHTML = mods.length > 0
+                ? '<ul>' + mods.map(m => `<li>${m} <button class="btn btn-danger" onclick="removeMod('${m}')">Eliminar</button></li>`).join('') + '</ul>'
+                : '<p>No hay mods instalados</p>';
+        }
+    });
+}
+
+function uploadMod() {
+    const fileInput = document.getElementById('modFile');
+    if (!fileInput.files.length) {
+        alert('Selecciona un archivo');
+        return;
+    }
+    
+    const formData = new FormData();
+    formData.append('mod_file', fileInput.files[0]);
+    formData.append('server_id', {{ server.id }});
+    
+    fetch(`/api/mods/upload/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': getCookie('csrftoken')
+        },
+        body: formData,
+        credentials: 'same-origin'
+    })
+    .then(response => response.json())
+    .then(data => {
+        alert(data.message || data.error || 'Mod subido');
+        loadMods();
+    });
+}
+
+function removeMod(modName) {
+    if (!confirm('¿Eliminar ' + modName + '?')) return;
+    
+    fetch(`/api/mods/remove/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': getCookie('csrftoken'),
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ 
+            server_id: {{ server.id }},
+            mod_name: modName 
+        }),
+        credentials: 'same-origin'
+    })
+    .then(response => response.json())
+    .then(data => {
+        alert(data.message || data.error || 'Mod eliminado');
+        loadMods();
+    });
+}
+
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+}
+
+loadMods();
+</script>
+{% endblock %}
+

@@ -108,3 +108,20 @@ ion-content {
   padding: 0 1rem;
   margin-bottom: 1.5rem;
 }
+
+.search-container {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  padding: 0 1rem;
+  margin-bottom: 1rem;
+
+  ion-searchbar {
+    flex: 1;
+  }
+
+  .add-whitelist-btn {
+    white-space: nowrap;
+  }
+}
+

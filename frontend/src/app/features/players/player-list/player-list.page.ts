@@ -96,8 +96,10 @@ export class PlayerListPage implements OnInit, OnDestroy {
   searchTerm = '';
   isCreateModalOpen = false;
   isEditModalOpen = false;
+  isAddWhitelistModalOpen = false;
   selectedUser: MinecraftUser | null = null;
   authMode: 'whitelist' | 'database' | 'both' | 'public' = 'whitelist';
+  newWhitelistPlayer = '';
   private playersSubscription?: Subscription;
 
   newUser = {
@@ -243,6 +245,45 @@ export class PlayerListPage implements OnInit, OnDestroy {
   canDeleteUser(user: MinecraftUser): boolean {
     return (this.authMode === 'database' || this.authMode === 'both') && 
            user.source !== 'whitelist';
+  }
+
+  canManageWhitelist(): boolean {
+    // Remover logs excesivos - solo loggear en casos especiales
+    return this.authMode === 'whitelist' || this.authMode === 'both';
+  }
+
+  openAddWhitelistModal(): void {
+    this.isAddWhitelistModalOpen = true;
+  }
+
+  async addPlayerToWhitelist(): Promise<void> {
+    if (!this.newWhitelistPlayer.trim()) {
+      this.toast.error('Ingresa un nombre de jugador');
+      return;
+    }
+
+    const serverId = this.authService.currentServerId;
+    if (!serverId) {
+      this.toast.error('No hay servidor seleccionado');
+      return;
+    }
+
+    const playerName = this.newWhitelistPlayer.trim();
+    this.whitelistService.addToWhitelist(serverId, playerName).subscribe({
+      next: () => {
+        this.toast.success(`${playerName} agregado a la whitelist`);
+        this.newWhitelistPlayer = '';
+        this.isAddWhitelistModalOpen = false;
+        this.loadWhitelist();
+        // Si es modo both, recargar usuarios también
+        if (this.authMode === 'both') {
+          this.loadUsers();
+        }
+      },
+      error: (error: any) => {
+        this.toast.error(error.message || 'Error al agregar a whitelist');
+      }
+    });
   }
 
   async createUser(): Promise<void> {

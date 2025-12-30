@@ -133,6 +133,7 @@ RCON_PASSWORD = os.environ.get('RCON_PASSWORD', 'change-me-in-production')
 MINECRAFT_DATA_PATH = os.environ.get('MINECRAFT_DATA_PATH', '/data')
 MODS_PATH = os.path.join(MINECRAFT_DATA_PATH, 'mods')
 WHITELIST_PATH = os.path.join(MINECRAFT_DATA_PATH, 'whitelist.json')
+MODS_POOL_PATH = os.environ.get('MODS_POOL_PATH', '/data/mods_pool')
 
 # Login URL
 LOGIN_URL = '/login/'
@@ -172,4 +173,9 @@ SERVER_EMAIL = DEFAULT_FROM_EMAIL
 
 # URL base para links en emails (usado en templates)
 SITE_URL = os.environ.get('SITE_URL', 'http://localhost:8000')
+
+# File Upload Settings - Permitir archivos grandes (200MB)
+DATA_UPLOAD_MAX_MEMORY_SIZE = 200 * 1024 * 1024  # 200MB
+FILE_UPLOAD_MAX_MEMORY_SIZE = 200 * 1024 * 1024  # 200MB
+DATA_UPLOAD_MAX_NUMBER_FIELDS = 10000
 

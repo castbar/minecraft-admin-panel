@@ -19,11 +19,17 @@
 
   <!-- Tab Instalados -->
   <div *ngIf="activeTab === 'installed'">
-    <ion-searchbar
-      [(ngModel)]="installedSearchTerm"
-      (ionInput)="onInstalledSearch($event)"
-      placeholder="Buscar mods...">
-    </ion-searchbar>
+    <div class="search-container">
+      <ion-searchbar
+        [(ngModel)]="installedSearchTerm"
+        (ionInput)="onInstalledSearch($event)"
+        placeholder="Buscar mods...">
+      </ion-searchbar>
+      <ion-button fill="outline" (click)="isUploadModalOpen = true" class="add-mod-btn">
+        <ion-icon name="add-outline" slot="start"></ion-icon>
+        Agregar Mod
+      </ion-button>
+    </div>
 
     <div *ngIf="loading" class="loading-container">
       <ion-spinner></ion-spinner>
@@ -34,7 +40,7 @@
         <ion-icon name="cube-outline" slot="start" color="primary"></ion-icon>
         <ion-label>
           <h2>{{ mod.name }}</h2>
-          <p>{{ mod.file_path }}</p>
+          <p>{{ mod.file_path || mod.path }}</p>
         </ion-label>
         <div slot="end" class="item-actions">
           <ion-badge [color]="mod.enabled ? 'success' : 'medium'">
@@ -43,7 +49,7 @@
           <ion-button fill="clear" size="small" (click)="toggleMod(mod)">
             <ion-icon [name]="mod.enabled ? 'close-outline' : 'checkmark-outline'" slot="icon-only"></ion-icon>
           </ion-button>
-          <ion-button *ngIf="mod.has_config" fill="clear" size="small" (click)="openConfigModal(mod)">
+          <ion-button *ngIf="mod.has_config || mod.pool_info?.has_config" fill="clear" size="small" (click)="openConfigModal(mod)">
             <ion-icon name="settings-outline" slot="icon-only"></ion-icon>
           </ion-button>
           <ion-button fill="clear" size="small" color="danger" (click)="deleteMod(mod)">
@@ -56,14 +62,8 @@
     <div *ngIf="!loading && filteredInstalledMods.length === 0" class="empty-state">
       <ion-icon name="cube-outline" size="large"></ion-icon>
       <h2>No hay mods instalados</h2>
-      <p>Sube tu primer mod usando el botón +</p>
+      <p>Sube tu primer mod usando el botón Agregar Mod</p>
     </div>
-
-    <ion-fab vertical="bottom" horizontal="end" slot="fixed">
-      <ion-fab-button (click)="isUploadModalOpen = true">
-        <ion-icon name="add-outline"></ion-icon>
-      </ion-fab-button>
-    </ion-fab>
   </div>
 
   <!-- Tab Pool -->
@@ -82,16 +82,22 @@
       <ion-item *ngFor="let mod of filteredPoolMods" lines="full">
         <ion-icon name="cube-outline" slot="start" color="primary"></ion-icon>
         <ion-label>
-          <h2>{{ mod.name }}</h2>
+          <h2>{{ mod.display_name || mod.name }}</h2>
           <p *ngIf="mod.description">{{ mod.description }}</p>
           <div class="mod-info">
             <ion-badge>{{ mod.category }}</ion-badge>
             <ion-badge *ngFor="let type of mod.compatible_servers" color="success">{{ type }}</ion-badge>
           </div>
         </ion-label>
-        <ion-button *ngIf="mod.download_url" fill="clear" size="small" (click)="openDownload(mod.download_url!)">
-          <ion-icon name="download-outline" slot="icon-only"></ion-icon>
-        </ion-button>
+        <div slot="end" class="item-actions">
+          <ion-button fill="outline" size="small" (click)="installFromPool(mod)">
+            <ion-icon name="add-outline" slot="start"></ion-icon>
+            Instalar
+          </ion-button>
+          <ion-button *ngIf="mod.download_url" fill="clear" size="small" (click)="openDownload(mod.download_url!)">
+            <ion-icon name="download-outline" slot="icon-only"></ion-icon>
+          </ion-button>
+        </div>
       </ion-item>
     </ion-list>
   </div>
@@ -102,8 +108,9 @@
       <ion-item *ngFor="let mod of modsWithConfig" button (click)="openConfigModal(mod)" lines="full">
         <ion-icon name="settings-outline" slot="start"></ion-icon>
         <ion-label>
-          <h2>{{ mod.name }}</h2>
-          <p>{{ mod.config_file_path }}</p>
+          <h2>{{ mod.pool_info?.display_name || mod.name }}</h2>
+          <p *ngIf="mod.pool_info?.config_file_path">{{ mod.pool_info?.config_file_path }}</p>
+          <p *ngIf="!mod.pool_info?.config_file_path && mod.config_file_path">{{ mod.config_file_path }}</p>
         </ion-label>
       </ion-item>
     </ion-list>
@@ -128,12 +135,13 @@
       </ion-header>
       <ion-content class="ion-padding">
         <input type="file" accept=".jar" (change)="onFileSelected($event)" #fileInput style="display: none;">
-        <ion-button expand="block" (click)="fileInput.click()">
+        <ion-button expand="block" (click)="fileInput.click()" [disabled]="isUploading">
           Seleccionar archivo .jar
         </ion-button>
         <p *ngIf="uploadFile" class="ion-margin-top">Archivo seleccionado: {{ uploadFile.name }}</p>
-        <ion-button expand="block" (click)="uploadMod()" [disabled]="!uploadFile" class="ion-margin-top">
-          Subir Mod
+        <ion-button expand="block" (click)="uploadMod()" [disabled]="!uploadFile || isUploading" class="ion-margin-top">
+          <ion-spinner *ngIf="isUploading" name="crescent" style="width: 1rem; height: 1rem; margin-right: 0.5rem;"></ion-spinner>
+          <span>Subir Mod</span>
         </ion-button>
       </ion-content>
     </ng-template>
@@ -151,10 +159,14 @@
         </ion-toolbar>
       </ion-header>
       <ion-content class="ion-padding">
+        <div class="config-info" *ngIf="selectedModConfig">
+          <p><strong>Formato:</strong> {{ configFormat.toUpperCase() }}</p>
+          <p *ngIf="selectedModConfig.config_file_path"><strong>Archivo:</strong> {{ selectedModConfig.config_file_path }}</p>
+        </div>
         <ion-textarea
           [(ngModel)]="configContent"
           rows="20"
-          placeholder="Contenido de la configuración...">
+          [placeholder]="'Contenido de la configuración (' + configFormat.toUpperCase() + ')...'">
         </ion-textarea>
         <div class="config-actions">
           <ion-button expand="block" (click)="saveConfig()" class="ion-margin-top">

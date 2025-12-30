@@ -52,6 +52,80 @@ def mods_list(request, server_id=None):
     if not user_role:
         return JsonResponse({'success': False, 'error': 'No access to this server'}, status=403)
     
+    # Si el servidor tiene container_name, leer desde el contenedor
+    if server.container_name:
+        import docker
+        try:
+            client = docker.from_env()
+            container = client.containers.get(server.container_name)
+            
+            # Ejecutar comando para listar mods en el contenedor
+            mods_path = '/data/mods'
+            plugins_path = '/data/plugins'
+            
+            # Determinar carpeta según tipo de servidor
+            if server.server_type in ['bukkit', 'spigot', 'paper']:
+                install_path = plugins_path
+            else:
+                install_path = mods_path
+            
+            # Listar archivos en el contenedor - usar sh -c para que funcionen redirecciones
+            result = container.exec_run(f'sh -c "ls -1 {install_path} 2>/dev/null || echo \\"\\""', user='minecraft')
+            files_str = result.output.decode('utf-8').strip()
+            # Filtrar solo archivos .jar y limpiar líneas vacías
+            files = [f.strip() for f in files_str.split('\n') if f.strip() and f.strip().endswith('.jar')] if files_str else []
+            
+            mods = []
+            for file in files:
+                # Obtener tamaño del archivo
+                size_result = container.exec_run(f'stat -c%s {install_path}/{file}', user='minecraft')
+                size = 0
+                try:
+                    size_str = size_result.output.decode('utf-8').strip()
+                    if size_str and size_str.isdigit():
+                        size = int(size_str)
+                except:
+                    size = 0
+                
+                # Buscar en pool de mods - búsqueda exacta del nombre (ignorando extensión)
+                # Limpiar solo la extensión .jar o .disabled
+                clean_name = file.replace('.jar', '').replace('.disabled', '').strip()
+                
+                # Búsqueda exacta (case-insensitive)
+                mod_pool = ModPool.objects.filter(name__iexact=clean_name).first()
+                
+                mod_info = {
+                    'name': file,
+                    'enabled': True,
+                    'size': size,
+                    'size_mb': round(size / (1024 * 1024), 2) if size > 0 else 0,
+                    'path': 'mods' if server.server_type not in ['bukkit', 'spigot', 'paper'] else 'plugins',
+                    'has_config': False,
+                    'file_path': f'{install_path}/{file}',
+                }
+                
+                # Agregar información del pool si existe
+                if mod_pool:
+                    mod_info['pool_info'] = {
+                        'id': mod_pool.id,
+                        'display_name': mod_pool.display_name,
+                        'mod_type': mod_pool.mod_type,
+                        'category': mod_pool.category,
+                        'has_config': bool(mod_pool.config_file_path),
+                        'config_file_path': mod_pool.config_file_path,
+                        'config_format': mod_pool.config_format,
+                    }
+                    mod_info['has_config'] = bool(mod_pool.config_file_path)
+                
+                mods.append(mod_info)
+            
+            return JsonResponse({'success': True, 'data': mods})
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            # Continuar con método de filesystem si falla
+    
+    # Método original: leer desde filesystem local
     mods_path = os.path.join(server.minecraft_data_path, 'mods')
     mods_disabled_path = os.path.join(server.minecraft_data_path, 'mods-disabled')
     plugins_path = os.path.join(server.minecraft_data_path, 'plugins')
@@ -371,6 +445,64 @@ def mod_upload(request, server_id=None):
         if file.size > 200 * 1024 * 1024:
             return JsonResponse({'success': False, 'error': 'File too large (max 200MB)'}, status=400)
         
+        # Si el servidor tiene container_name, guardar en el contenedor del servidor
+        if server.container_name:
+            import docker
+            try:
+                client = docker.from_env()
+                container = client.containers.get(server.container_name)
+                
+                mods_path = '/data/mods'
+                
+                # Verificar si el archivo ya existe
+                result = container.exec_run(f'test -f {mods_path}/{file.name} && echo "exists" || echo ""', user='minecraft')
+                if result.output.decode('utf-8').strip() == 'exists':
+                    return JsonResponse({'success': False, 'error': f'Mod {file.name} already exists'}, status=400)
+                
+                # Crear directorio si no existe
+                container.exec_run(f'mkdir -p {mods_path}', user='minecraft')
+                
+                # Guardar archivo temporalmente en el contenedor Django
+                import tempfile
+                import tarfile
+                import io
+                
+                # Leer el contenido del archivo
+                file_content = b''
+                for chunk in file.chunks():
+                    file_content += chunk
+                
+                # Crear un tar en memoria
+                tar_stream = io.BytesIO()
+                with tarfile.open(fileobj=tar_stream, mode='w') as tar:
+                    tarinfo = tarfile.TarInfo(name=file.name)
+                    tarinfo.size = len(file_content)
+                    tar.addfile(tarinfo, io.BytesIO(file_content))
+                
+                tar_stream.seek(0)
+                
+                # Copiar archivo al contenedor del servidor usando put_archive
+                container.put_archive(mods_path, tar_stream.read())
+                
+                # Asegurar permisos correctos
+                container.exec_run(f'chown minecraft:minecraft {mods_path}/{file.name}', user='root')
+                
+                return JsonResponse({
+                    'success': True, 
+                    'message': f'Mod {file.name} uploaded successfully',
+                    'data': {
+                        'name': file.name,
+                        'enabled': True,
+                        'size': file.size,
+                        'size_mb': round(file.size / (1024 * 1024), 2)
+                    }
+                })
+            except Exception as e:
+                import traceback
+                traceback.print_exc()
+                return JsonResponse({'success': False, 'error': f'Error uploading to container: {str(e)}'}, status=500)
+        
+        # Método original: guardar en filesystem local
         mods_path = os.path.join(server.minecraft_data_path, 'mods')
         os.makedirs(mods_path, exist_ok=True)
         
@@ -435,6 +567,8 @@ def mod_delete(request, server_id=None):
     try:
         data = json.loads(request.body)
         mod_name = data.get('mod_name', '').strip()
+        file_path = data.get('file_path', '').strip()
+        enabled = data.get('enabled', True)
         
         if not mod_name:
             return JsonResponse({'success': False, 'error': 'Mod name required'}, status=400)
@@ -443,6 +577,81 @@ def mod_delete(request, server_id=None):
         if '..' in mod_name or '/' in mod_name or '\\' in mod_name:
             return JsonResponse({'success': False, 'error': 'Invalid mod name'}, status=400)
         
+        # Si el servidor tiene container_name, eliminar del contenedor del servidor
+        if server.container_name:
+            import docker
+            try:
+                client = docker.from_env()
+                container = client.containers.get(server.container_name)
+                
+                # Si tenemos file_path completo, usarlo directamente
+                if file_path:
+                    # Limpiar la ruta (remover /data/ si está al inicio)
+                    clean_path = file_path.replace('/data/', '').lstrip('/')
+                    full_path = f'/data/{clean_path}'
+                    
+                    # Verificar que existe usando sh -c
+                    result = container.exec_run(f'sh -c "test -f {full_path} && echo exists || echo notfound"', user='minecraft')
+                    output = result.output.decode('utf-8').strip()
+                    if output == 'exists':
+                        container.exec_run(f'rm {full_path}', user='minecraft')
+                        return JsonResponse({
+                            'success': True, 
+                            'message': f'Mod {mod_name} deleted'
+                        })
+                
+                # Si no tenemos file_path, buscar en ubicaciones comunes
+                mods_path = '/data/mods'
+                mods_disabled_path = '/data/mods-disabled'
+                
+                # Buscar en mods/ (habilitado)
+                result = container.exec_run(f'sh -c "test -f {mods_path}/{mod_name} && echo exists || echo notfound"', user='minecraft')
+                output = result.output.decode('utf-8').strip()
+                if output == 'exists':
+                    container.exec_run(f'rm {mods_path}/{mod_name}', user='minecraft')
+                    return JsonResponse({
+                        'success': True, 
+                        'message': f'Mod {mod_name} deleted'
+                    })
+                
+                # Buscar con .disabled en mods/
+                result = container.exec_run(f'sh -c "test -f {mods_path}/{mod_name}.disabled && echo exists || echo notfound"', user='minecraft')
+                output = result.output.decode('utf-8').strip()
+                if output == 'exists':
+                    container.exec_run(f'rm {mods_path}/{mod_name}.disabled', user='minecraft')
+                    return JsonResponse({
+                        'success': True, 
+                        'message': f'Mod {mod_name} deleted'
+                    })
+                
+                # Buscar en mods-disabled/ (deshabilitado)
+                result = container.exec_run(f'sh -c "test -f {mods_disabled_path}/{mod_name} && echo exists || echo notfound"', user='minecraft')
+                output = result.output.decode('utf-8').strip()
+                if output == 'exists':
+                    container.exec_run(f'rm {mods_disabled_path}/{mod_name}', user='minecraft')
+                    return JsonResponse({
+                        'success': True, 
+                        'message': f'Mod {mod_name} deleted'
+                    })
+                
+                return JsonResponse({'success': False, 'error': 'Mod not found'}, status=404)
+            except Exception as e:
+                import traceback
+                traceback.print_exc()
+                return JsonResponse({'success': False, 'error': f'Error deleting from container: {str(e)}'}, status=500)
+        
+        # Método original: eliminar del filesystem local
+        # Si tenemos file_path completo, usarlo directamente
+        if file_path:
+            mod_path = file_path if os.path.isabs(file_path) else os.path.join(server.minecraft_data_path, file_path.lstrip('/'))
+            if os.path.exists(mod_path):
+                os.remove(mod_path)
+                return JsonResponse({
+                    'success': True, 
+                    'message': f'Mod {mod_name} deleted'
+                })
+        
+        # Si no tenemos file_path, buscar en ubicaciones comunes
         mods_path = os.path.join(server.minecraft_data_path, 'mods')
         mods_disabled_path = os.path.join(server.minecraft_data_path, 'mods-disabled')
         

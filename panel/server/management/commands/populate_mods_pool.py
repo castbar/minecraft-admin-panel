@@ -12,7 +12,7 @@ class Command(BaseCommand):
         mods_data = [
             # Mods de Fabric/Forge
             {
-                'name': 'cobblemon',
+                'name': 'Cobblemon-fabric-1.7.1+1.21.1',
                 'display_name': 'Cobblemon',
                 'mod_type': 'mod',
                 'compatible_fabric': True,
@@ -27,7 +27,7 @@ class Command(BaseCommand):
                 'default_config': '{\n  "spawnRate": 0.5,\n  "enableShiny": true,\n  "maxPokemonPerChunk": 5\n}',
             },
             {
-                'name': 'simple-voice-chat',
+                'name': 'voicechat-fabric-1.21.1-2.6.10',
                 'display_name': 'Simple Voice Chat',
                 'mod_type': 'mod',
                 'compatible_fabric': True,

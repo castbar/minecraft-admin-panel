@@ -34,7 +34,12 @@ export class ApiService {
       params: httpParams,
       withCredentials: true
     }).pipe(
-      map(res => (res as any).data !== undefined ? (res as any).data : res),
+      map(res => {
+        console.log(`ApiService.get - ${endpoint} - Raw response:`, res);
+        const extracted = (res as any).data !== undefined ? (res as any).data : res;
+        console.log(`ApiService.get - ${endpoint} - Extracted data:`, extracted);
+        return extracted;
+      }),
       catchError(this.handleError)
     );
   }

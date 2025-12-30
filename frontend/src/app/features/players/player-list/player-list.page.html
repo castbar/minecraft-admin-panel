@@ -42,11 +42,22 @@
       </ion-card-content>
     </ion-card>
 
-    <ion-searchbar
-      [(ngModel)]="searchTerm"
-      (ionInput)="onSearch($event)"
-      placeholder="Buscar jugadores...">
-    </ion-searchbar>
+    <div class="search-container">
+      <ion-searchbar
+        [(ngModel)]="searchTerm"
+        (ionInput)="onSearch($event)"
+        placeholder="Buscar jugadores...">
+      </ion-searchbar>
+      <ion-button 
+        *ngIf="canManageWhitelist()"
+        fill="outline"
+        size="default"
+        (click)="openAddWhitelistModal()"
+        class="add-whitelist-btn">
+        <ion-icon name="add-outline" slot="start"></ion-icon>
+        Agregar a Lista Blanca
+      </ion-button>
+    </div>
 
     <div *ngIf="filteredUsers.length === 0" class="empty-state">
       <ion-icon name="person-outline" size="large"></ion-icon>
@@ -180,6 +191,33 @@
         </ion-item>
         <ion-button expand="block" (click)="updateUser()" class="ion-margin-top">
           Guardar Cambios
+        </ion-button>
+      </ion-content>
+    </ng-template>
+  </ion-modal>
+
+  <!-- Modal Agregar a Whitelist -->
+  <ion-modal [isOpen]="isAddWhitelistModalOpen" (willDismiss)="isAddWhitelistModalOpen = false">
+    <ng-template>
+      <ion-header>
+        <ion-toolbar>
+          <ion-title>Agregar a Lista Blanca</ion-title>
+          <ion-buttons slot="end">
+            <ion-button (click)="isAddWhitelistModalOpen = false">Cerrar</ion-button>
+          </ion-buttons>
+        </ion-toolbar>
+      </ion-header>
+      <ion-content class="ion-padding">
+        <ion-item>
+          <ion-label position="stacked">Nombre de Jugador *</ion-label>
+          <ion-input 
+            [(ngModel)]="newWhitelistPlayer" 
+            placeholder="Ingresa el nombre del jugador"
+            (keyup.enter)="addPlayerToWhitelist()">
+          </ion-input>
+        </ion-item>
+        <ion-button expand="block" (click)="addPlayerToWhitelist()" class="ion-margin-top">
+          Agregar a Lista Blanca
         </ion-button>
       </ion-content>
     </ng-template>

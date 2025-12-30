@@ -72,6 +72,11 @@ class ModPool(models.Model):
         blank=True,
         help_text="URL directa de descarga (opcional)"
     )
+    file_path = models.CharField(
+        max_length=500,
+        blank=True,
+        help_text="Ruta del archivo .jar en el servidor (ej: '/data/mods_pool/cobblemon.jar')"
+    )
     version = models.CharField(
         max_length=50,
         blank=True,

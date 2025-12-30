@@ -1,15 +1,7 @@
 import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { ApiService } from '../../../core/services/api.service';
-
-export interface Mod {
-  id?: number;
-  name: string;
-  file_path: string;
-  enabled: boolean;
-  has_config?: boolean;
-  config_file_path?: string;
-}
+import { Mod } from '../../../shared/models/mod.model';
 
 export interface ModConfig {
   mod_name: string;
@@ -33,7 +25,7 @@ export class ModService {
 
   uploadMod(serverId: number, file: File): Observable<any> {
     const formData = new FormData();
-    formData.append('file', file);
+    formData.append('mod_file', file);
     return this.api.post(`/servers/${serverId}/mods/upload/`, formData);
   }
 
@@ -45,8 +37,12 @@ export class ModService {
     return this.api.post(`/servers/${serverId}/mods/disable/`, { mod_name: modName });
   }
 
-  deleteMod(serverId: number, modName: string): Observable<any> {
-    return this.api.post(`/servers/${serverId}/mods/delete/`, { mod_name: modName });
+  deleteMod(serverId: number, mod: Mod): Observable<any> {
+    return this.api.post(`/servers/${serverId}/mods/delete/`, {
+      mod_name: mod.name,
+      file_path: mod.file_path || mod.path,
+      enabled: mod.enabled
+    });
   }
 
   getModConfig(serverId: number, modName: string): Observable<ModConfig> {

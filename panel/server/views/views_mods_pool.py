@@ -125,6 +125,177 @@ def mods_pool_categories(request):
 @csrf_exempt
 @login_required
 @require_http_methods(["POST"])
+def mods_pool_install(request, server_id=None):
+    """
+    Instalar un mod del pool en un servidor - Requiere header X-Server-ID
+    
+    Body JSON:
+    {
+        "mod_pool_id": 1
+    }
+    
+    Copia el archivo del pool al servidor
+    """
+    from ..utils.permissions import _get_server_id_from_request
+    from ..models import Server, UserServerRole
+    from django.conf import settings
+    import shutil
+    import docker
+    
+    # Obtener server_id del header
+    resolved_server_id = _get_server_id_from_request(request) or server_id
+    if not resolved_server_id:
+        return JsonResponse({
+            'success': False, 
+            'error': 'Server ID required. Send header X-Server-ID: <id>'
+        }, status=400)
+    
+    try:
+        server = get_object_or_404(Server, id=resolved_server_id, is_active=True)
+    except Server.DoesNotExist:
+        return JsonResponse({'success': False, 'error': 'Server not found'}, status=404)
+    
+    # Verificar permisos
+    user_role = UserServerRole.objects.filter(user=request.user, server=server).first()
+    if not user_role:
+        return JsonResponse({'success': False, 'error': 'No access to this server'}, status=403)
+    
+    if not user_role.has_permission('manage_mods'):
+        return JsonResponse({'success': False, 'error': 'Permission denied: manage_mods required'}, status=403)
+    
+    try:
+        data = json.loads(request.body)
+        mod_pool_id = data.get('mod_pool_id')
+        
+        if not mod_pool_id:
+            return JsonResponse({'success': False, 'error': 'mod_pool_id required'}, status=400)
+        
+        mod_pool = get_object_or_404(ModPool, id=mod_pool_id, is_active=True)
+        
+        # Verificar compatibilidad
+        compatible_types = mod_pool.get_compatible_server_types()
+        if server.server_type not in compatible_types:
+            return JsonResponse({
+                'success': False, 
+                'error': f'Mod {mod_pool.display_name} is not compatible with server type {server.server_type}. Compatible types: {", ".join(compatible_types)}'
+            }, status=400)
+        
+        # Buscar archivo del mod
+        mods_pool_path = getattr(settings, 'MODS_POOL_PATH', '/data/mods_pool')
+        
+        # Si tiene file_path configurado, usarlo
+        if mod_pool.file_path and os.path.exists(mod_pool.file_path):
+            source_file = mod_pool.file_path
+        else:
+            # Buscar por nombre común
+            possible_names = [
+                f'{mod_pool.name}.jar',
+                f'{mod_pool.display_name.lower().replace(" ", "-")}.jar',
+                f'{mod_pool.name}-{mod_pool.version}.jar' if mod_pool.version else None,
+            ]
+            
+            source_file = None
+            for name in possible_names:
+                if name:
+                    test_path = os.path.join(mods_pool_path, name)
+                    if os.path.exists(test_path):
+                        source_file = test_path
+                        break
+            
+            if not source_file:
+                return JsonResponse({
+                    'success': False,
+                    'error': f'Mod file not found. Please place {mod_pool.name}.jar in {mods_pool_path}/'
+                }, status=404)
+        
+        # Determinar carpeta destino según tipo de servidor
+        if server.server_type in ['bukkit', 'spigot', 'paper']:
+            dest_folder = 'plugins'
+        else:
+            dest_folder = 'mods'
+        
+        # Nombre del archivo destino
+        dest_filename = f'{mod_pool.name}.jar'
+        
+        # Si el servidor tiene container_name, copiar al contenedor
+        if server.container_name:
+            try:
+                client = docker.from_env()
+                container = client.containers.get(server.container_name)
+                
+                dest_path = f'/data/{dest_folder}/{dest_filename}'
+                
+                # Verificar si ya existe
+                result = container.exec_run(f'sh -c "test -f {dest_path} && echo exists || echo notfound"', user='minecraft')
+                if result.output.decode('utf-8').strip() == 'exists':
+                    return JsonResponse({
+                        'success': False,
+                        'error': f'Mod {dest_filename} already installed'
+                    }, status=400)
+                
+                # Copiar archivo al contenedor
+                import tarfile
+                import io
+                
+                with open(source_file, 'rb') as f:
+                    file_content = f.read()
+                
+                tar_stream = io.BytesIO()
+                with tarfile.open(fileobj=tar_stream, mode='w') as tar:
+                    tarinfo = tarfile.TarInfo(name=dest_filename)
+                    tarinfo.size = len(file_content)
+                    tar.addfile(tarinfo, io.BytesIO(file_content))
+                
+                tar_stream.seek(0)
+                container.put_archive(f'/data/{dest_folder}', tar_stream.read())
+                
+                # Asegurar permisos
+                container.exec_run(f'chown minecraft:minecraft {dest_path}', user='root')
+                
+                return JsonResponse({
+                    'success': True,
+                    'message': f'Mod {mod_pool.display_name} installed successfully',
+                    'data': {
+                        'name': dest_filename,
+                        'enabled': True
+                    }
+                })
+            except Exception as e:
+                import traceback
+                traceback.print_exc()
+                return JsonResponse({
+                    'success': False,
+                    'error': f'Error installing to container: {str(e)}'
+                }, status=500)
+        
+        # Método original: copiar a filesystem local
+        dest_path = os.path.join(server.minecraft_data_path, dest_folder, dest_filename)
+        
+        if os.path.exists(dest_path):
+            return JsonResponse({
+                'success': False,
+                'error': f'Mod {dest_filename} already installed'
+            }, status=400)
+        
+        os.makedirs(os.path.dirname(dest_path), exist_ok=True)
+        shutil.copy2(source_file, dest_path)
+        
+        return JsonResponse({
+            'success': True,
+            'message': f'Mod {mod_pool.display_name} installed successfully',
+            'data': {
+                'name': dest_filename,
+                'enabled': True
+            }
+        })
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+
+@csrf_exempt
+@login_required
+@require_http_methods(["POST"])
 def mods_pool_create(request):
     """
     Crear nuevo mod/plugin en el pool (requiere staff)

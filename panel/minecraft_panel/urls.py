@@ -29,6 +29,7 @@ urlpatterns = [
         path('mods/pool/categories/', views_mods_pool.mods_pool_categories, name='mods_pool_categories'),
         path('mods/pool/<int:mod_id>/', views_mods_pool.mods_pool_detail, name='mods_pool_detail'),
         path('mods/pool/create/', views_mods_pool.mods_pool_create, name='mods_pool_create'),
+        path('servers/<int:server_id>/mods/pool/install/', views_mods_pool.mods_pool_install, name='mods_pool_install'),
         
         # API antigua (compatibilidad)
         path('whitelist/', views.whitelist_api, name='whitelist_api'),

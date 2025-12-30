@@ -5,6 +5,7 @@ import { ApiService } from '../../../core/services/api.service';
 export interface ModPool {
   id: number;
   name: string;
+  display_name?: string;
   description?: string;
   category: string;
   author?: string;
@@ -45,6 +46,10 @@ export class ModPoolService {
 
   createMod(data: CreateModPoolRequest): Observable<ModPool> {
     return this.api.post<ModPool>('/mods/pool/create/', data);
+  }
+
+  installMod(serverId: number, modPoolId: number): Observable<any> {
+    return this.api.post(`/servers/${serverId}/mods/pool/install/`, { mod_pool_id: modPoolId });
   }
 }
 

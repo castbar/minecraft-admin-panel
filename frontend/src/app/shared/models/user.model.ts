@@ -9,13 +9,15 @@ export interface User {
 
 export interface MinecraftUser {
   id: number;
-  server_id: number;
+  server_id?: number;
   username: string;
   email?: string;
   is_active: boolean;
   is_operator: boolean;
-  created_at: string;
-  updated_at: string;
+  created_at?: string | null;
+  updated_at?: string | null;
+  last_login?: string | null;
+  source?: 'database' | 'whitelist';
 }
 
 import { Server } from './server.model';

@@ -398,16 +398,20 @@ export class PlayerListPage implements OnInit, OnDestroy {
         }
         // Si es modo whitelist, usar whitelist como lista principal
         if (this.authMode === 'whitelist') {
-          this.users = this.whitelistData.map((item, idx) => ({
-            id: idx + 1,
-            username: item.name,
-            email: '',
-            is_active: true,
-            is_operator: false,
-            last_login: null,
-            created_at: null,
-            source: 'whitelist'
-          } as MinecraftUser));
+          this.users = this.whitelistData.map((item, idx) => {
+            const user: MinecraftUser = {
+              id: idx + 1,
+              username: item.name,
+              email: '',
+              is_active: true,
+              is_operator: false,
+              last_login: null,
+              created_at: null,
+              updated_at: null,
+              source: 'whitelist'
+            };
+            return user;
+          });
           this.filteredUsers = this.users;
           this.loading = false;
         }

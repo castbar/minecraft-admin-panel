@@ -12,4 +12,5 @@ from .views_mods import *
 from .views_mods_config import *
 from .views_mods_config_simple import *
 from .views_mods_pool import *
+from .views_users import *
 

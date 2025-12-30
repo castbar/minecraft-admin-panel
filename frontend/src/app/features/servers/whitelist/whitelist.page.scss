@@ -1,0 +1,43 @@
+.loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  gap: 16px;
+
+  p {
+    margin: 0;
+    color: var(--ion-color-medium);
+  }
+}
+
+.add-player-form {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+
+  ion-input {
+    flex: 1;
+  }
+}
+
+.empty-state {
+  text-align: center;
+  padding: 40px;
+  color: var(--ion-color-medium);
+
+  ion-icon {
+    margin-bottom: 16px;
+  }
+}
+
+ion-list {
+  padding: 0;
+}
+
+ion-item {
+  --padding-start: 16px;
+  --padding-end: 16px;
+}
+

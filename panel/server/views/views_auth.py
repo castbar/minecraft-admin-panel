@@ -103,12 +103,16 @@ def api_login(request):
                 'error': 'Invalid credentials'
             }, status=401)
         
-        # Obtener servidores del usuario
+        # Login exitoso
+        login(request, user)
+        
+        # Obtener servidores del usuario (si es staff, puede no tener servidores asignados)
         user_roles = UserServerRole.objects.filter(
             user=user
         ).select_related('server').filter(server__is_active=True)
         
-        if not user_roles.exists():
+        # Si el usuario es staff, puede acceder sin servidores asignados
+        if not user_roles.exists() and not user.is_staff:
             return JsonResponse({
                 'success': False,
                 'error': 'No servers available for this user'
@@ -118,61 +122,52 @@ def api_login(request):
         server = None
         user_role = None
         
-        if host:
-            # Buscar servidor por host exacto
-            for role in user_roles:
-                if role.server.host == host or role.server.host == host.split(':')[0]:
-                    server = role.server
-                    user_role = role
-                    break
-            
-            # Si no se encuentra por host exacto, usar el primer servidor del usuario
-            if not server:
+        if user_roles.exists():
+            if host:
+                # Buscar servidor por host exacto
+                for role in user_roles:
+                    if role.server.host == host or role.server.host == host.split(':')[0]:
+                        server = role.server
+                        user_role = role
+                        break
+                
+                # Si no se encuentra por host exacto, usar el primer servidor del usuario
+                if not server:
+                    user_role = user_roles.first()
+                    server = user_role.server
+            else:
+                # Si no se proporciona host, usar el primer servidor del usuario
                 user_role = user_roles.first()
-                server = user_role.server
-        else:
-            # Si no se proporciona host, usar el primer servidor del usuario
-            user_role = user_roles.first()
-            server = user_role.server
-        
-        # user_role siempre debería existir aquí porque ya verificamos user_roles.exists()
-        # pero por seguridad verificamos de nuevo
-        if not user_role:
-            return JsonResponse({
-                'success': False,
-                'error': 'No access to servers'
-            }, status=403)
-        
-        # Verificar si el servidor está oculto y el cliente no está en la misma red
-        is_local_network = _is_local_network(client_ip)
-        
-        if server.is_hidden and not is_local_network:
-            SecurityLog.objects.create(
-                log_type='unauthorized_access',
-                ip_address=client_ip,
-                details={'message': f'User {user.username} attempted to access hidden server {server.host} from external network', 'username': user.username, 'host': server.host}
-            )
-            return JsonResponse({
-                'success': False,
-                'error': 'Server is hidden and not accessible from your network'
-            }, status=403)
-        
-        # Login exitoso
-        login(request, user)
+                server = user_role.server if user_role else None
+            
+            # Verificar si el servidor está oculto y el cliente no está en la misma red
+            if server:
+                is_local_network = _is_local_network(client_ip)
+                
+                if server.is_hidden and not is_local_network:
+                    SecurityLog.objects.create(
+                        log_type='unauthorized_access',
+                        ip_address=client_ip,
+                        details={'message': f'User {user.username} attempted to access hidden server {server.host} from external network', 'username': user.username, 'host': server.host}
+                    )
+                    return JsonResponse({
+                        'success': False,
+                        'error': 'Server is hidden and not accessible from your network'
+                    }, status=403)
+                
+                # Guardar sesión del servidor
+                from ..models.models_multi import ServerSession
+                ServerSession.objects.update_or_create(
+                    user=user,
+                    server=server,
+                    defaults={'last_accessed': timezone.now()}
+                )
         
         # Registrar login exitoso
         SecurityLog.objects.create(
             log_type='successful_login',
             ip_address=client_ip,
-            details={'message': f'Successful API login for user: {user.username} (host: {server.host})', 'username': user.username, 'host': server.host, 'success': True}
-        )
-        
-        # Guardar sesión del servidor
-        from ..models.models_multi import ServerSession
-        ServerSession.objects.update_or_create(
-            user=user,
-            server=server,
-            defaults={'last_accessed': timezone.now()}
+            details={'message': f'Successful API login for user: {user.username}', 'username': user.username, 'success': True}
         )
         
         # Obtener todos los servidores del usuario para el frontend
@@ -189,18 +184,30 @@ def api_login(request):
                 'role': role.role,
             })
         
+        # Preparar respuesta con información del usuario
+        response_data = {
+            'user': {
+                'id': user.id,
+                'username': user.username,
+                'email': user.email or '',
+                'is_staff': user.is_staff,
+            },
+            'token': 'session-based',  # Por ahora sesión, luego JWT
+            'servers': servers_list  # Lista completa de servidores disponibles
+        }
+        
+        # Si hay servidor seleccionado, agregarlo
+        if server and user_role:
+            response_data['server'] = {
+                'id': server.id,
+                'name': server.name,
+                'host': server.host,
+                'role': user_role.role,
+            }
+        
         return JsonResponse({
             'success': True,
-            'data': {
-                'token': 'session-based',  # Por ahora sesión, luego JWT
-                'server': {
-                    'id': server.id,
-                    'name': server.name,
-                    'host': server.host,
-                    'role': user_role.role,
-                },
-                'servers': servers_list  # Lista completa de servidores disponibles
-            }
+            'data': response_data
         })
             
     except Exception as e:
@@ -213,6 +220,54 @@ def api_login(request):
             'success': False,
             'error': str(e)
         }, status=500)
+
+@csrf_exempt
+@require_http_methods(["GET"])
+def api_check_auth(request):
+    """Verificar si el usuario está autenticado (verificar sesión del servidor)"""
+    from django.contrib.auth.decorators import login_required
+    from ..models import UserServerRole
+    from ..models.models_multi import ServerSession
+    
+    if not request.user.is_authenticated:
+        return JsonResponse({
+            'success': False,
+            'authenticated': False,
+            'error': 'Not authenticated'
+        }, status=401)
+    
+    # Obtener servidores disponibles para el usuario
+    user_servers = UserServerRole.objects.filter(user=request.user).select_related('server')
+    servers = []
+    for user_role in user_servers:
+        if user_role.server.is_active:
+            # Obtener información de sesión guardada
+            session = ServerSession.objects.filter(
+                user=request.user,
+                server=user_role.server
+            ).first()
+            
+            servers.append({
+                'id': user_role.server.id,
+                'name': user_role.server.name,
+                'host': user_role.server.host,
+                'role': user_role.role,
+                'is_hidden': user_role.server.is_hidden,
+                'last_accessed': session.last_accessed.isoformat() if session else None,
+                'is_favorite': session.is_favorite if session else False,
+            })
+    
+    return JsonResponse({
+        'success': True,
+        'authenticated': True,
+        'user': {
+            'id': request.user.id,
+            'username': request.user.username,
+            'email': request.user.email,
+            'is_staff': request.user.is_staff,
+        },
+        'servers': servers
+    })
 
 @csrf_exempt
 @require_http_methods(["POST"])

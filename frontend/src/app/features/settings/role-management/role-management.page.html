@@ -1,0 +1,157 @@
+<ion-header>
+  <ion-toolbar>
+    <ion-title>Gestión de Roles</ion-title>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content>
+  <div *ngIf="loading" class="loading-container">
+    <ion-spinner></ion-spinner>
+    <p>Cargando roles...</p>
+  </div>
+
+  <div *ngIf="!loading">
+    <!-- Información del servidor -->
+    <ion-card *ngIf="server">
+      <ion-card-header>
+        <ion-card-title>
+          <ion-icon name="server-outline"></ion-icon>
+          {{ server.name }}
+        </ion-card-title>
+      </ion-card-header>
+      <ion-card-content>
+        <p>Gestiona los roles de los usuarios para este servidor</p>
+      </ion-card-content>
+    </ion-card>
+
+    <!-- Lista de roles -->
+    <ion-card>
+      <ion-card-header>
+        <ion-card-title>
+          Roles Asignados ({{ roles.length }})
+        </ion-card-title>
+      </ion-card-header>
+      <ion-card-content>
+        <div *ngIf="roles.length === 0" class="empty-state">
+          <ion-icon name="people-outline" size="large"></ion-icon>
+          <p>No hay roles asignados</p>
+        </div>
+
+        <ion-list *ngIf="roles.length > 0">
+          <ion-item *ngFor="let role of roles">
+            <ion-label>
+              <h2>{{ role.user.username }}</h2>
+              <p>{{ role.user.email || 'Sin email' }}</p>
+            </ion-label>
+            <ion-badge 
+              slot="end"
+              [color]="role.role === 'admin' ? 'danger' : role.role === 'moderator' ? 'warning' : 'primary'">
+              {{ roleLabels[role.role] }}
+            </ion-badge>
+            <div slot="end" class="role-actions">
+              <ion-button 
+                fill="clear"
+                size="small"
+                (click)="openEditModal(role)">
+                <ion-icon name="create-outline" slot="icon-only"></ion-icon>
+              </ion-button>
+              <ion-button 
+                fill="clear"
+                size="small"
+                color="danger"
+                (click)="removeRole(role)">
+                <ion-icon name="trash-outline" slot="icon-only"></ion-icon>
+              </ion-button>
+            </div>
+          </ion-item>
+        </ion-list>
+      </ion-card-content>
+    </ion-card>
+  </div>
+
+  <!-- FAB para asignar rol -->
+  <ion-fab vertical="bottom" horizontal="end" slot="fixed" *ngIf="authService.currentUser?.is_staff">
+    <ion-fab-button (click)="openAssignModal()">
+      <ion-icon name="add-outline"></ion-icon>
+    </ion-fab-button>
+  </ion-fab>
+
+  <!-- Modal asignar rol -->
+  <ion-modal [isOpen]="isAssignModalOpen" (willDismiss)="isAssignModalOpen = false">
+    <ng-template>
+      <ion-header>
+        <ion-toolbar>
+          <ion-title>Asignar Rol</ion-title>
+          <ion-buttons slot="end">
+            <ion-button (click)="isAssignModalOpen = false">
+              <ion-icon name="close-outline"></ion-icon>
+            </ion-button>
+          </ion-buttons>
+        </ion-toolbar>
+      </ion-header>
+      <ion-content class="ion-padding">
+        <ion-item>
+          <ion-label position="stacked">Usuario *</ion-label>
+          <ion-select [(ngModel)]="assignForm.user_id">
+            <ion-select-option [value]="0">Seleccionar usuario</ion-select-option>
+            <ion-select-option 
+              *ngFor="let user of getAvailableUsers()" 
+              [value]="user.id">
+              {{ user.username }} {{ user.email ? '(' + user.email + ')' : '' }}
+            </ion-select-option>
+          </ion-select>
+        </ion-item>
+        <ion-item>
+          <ion-label position="stacked">Rol *</ion-label>
+          <ion-select [(ngModel)]="assignForm.role">
+            <ion-select-option value="admin">Administrador</ion-select-option>
+            <ion-select-option value="moderator">Moderador</ion-select-option>
+            <ion-select-option value="viewer">Visualizador</ion-select-option>
+          </ion-select>
+        </ion-item>
+        <ion-button 
+          expand="block" 
+          (click)="assignRole()" 
+          class="ion-margin-top">
+          Asignar Rol
+        </ion-button>
+      </ion-content>
+    </ng-template>
+  </ion-modal>
+
+  <!-- Modal editar rol -->
+  <ion-modal [isOpen]="isEditModalOpen" (willDismiss)="isEditModalOpen = false">
+    <ng-template>
+      <ion-header>
+        <ion-toolbar>
+          <ion-title>Editar Rol</ion-title>
+          <ion-buttons slot="end">
+            <ion-button (click)="isEditModalOpen = false">
+              <ion-icon name="close-outline"></ion-icon>
+            </ion-button>
+          </ion-buttons>
+        </ion-toolbar>
+      </ion-header>
+      <ion-content class="ion-padding">
+        <p *ngIf="editingRole">
+          Editar rol de: <strong>{{ editingRole.user.username }}</strong>
+        </p>
+        <ion-item>
+          <ion-label position="stacked">Rol *</ion-label>
+          <ion-select [(ngModel)]="editForm.role">
+            <ion-select-option value="admin">Administrador</ion-select-option>
+            <ion-select-option value="moderator">Moderador</ion-select-option>
+            <ion-select-option value="viewer">Visualizador</ion-select-option>
+          </ion-select>
+        </ion-item>
+        <ion-button 
+          expand="block" 
+          (click)="updateRole()" 
+          class="ion-margin-top">
+          Actualizar Rol
+        </ion-button>
+      </ion-content>
+    </ng-template>
+  </ion-modal>
+</ion-content>
+

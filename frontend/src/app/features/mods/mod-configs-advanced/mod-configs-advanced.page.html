@@ -1,0 +1,136 @@
+<ion-header>
+  <ion-toolbar>
+    <ion-title>Configuraciones Avanzadas de Mods</ion-title>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content>
+  <div *ngIf="loading" class="loading-container">
+    <ion-spinner></ion-spinner>
+    <p>Cargando configuraciones...</p>
+  </div>
+
+  <div *ngIf="!loading">
+    <!-- Acciones globales -->
+    <ion-card>
+      <ion-card-content>
+        <ion-button 
+          expand="block"
+          color="success"
+          (click)="applyAllConfigs()"
+          [disabled]="configs.length === 0">
+          <ion-icon name="play-outline" slot="start"></ion-icon>
+          Aplicar Todas las Configuraciones
+        </ion-button>
+      </ion-card-content>
+    </ion-card>
+
+    <!-- Lista de configuraciones -->
+    <ion-card>
+      <ion-card-header>
+        <ion-card-title>
+          Configuraciones ({{ configs.length }})
+        </ion-card-title>
+      </ion-card-header>
+      <ion-card-content>
+        <div *ngIf="configs.length === 0" class="empty-state">
+          <ion-icon name="document-text-outline" size="large"></ion-icon>
+          <p>No hay configuraciones</p>
+        </div>
+
+        <ion-list *ngIf="configs.length > 0">
+          <ion-item *ngFor="let config of configs">
+            <ion-label>
+              <h2>{{ config.mod_name }}</h2>
+              <p>{{ config.config_file_path }}</p>
+              <p class="config-preview">{{ config.config_content.substring(0, 100) }}...</p>
+            </ion-label>
+            <div slot="end" class="config-actions">
+              <ion-button 
+                fill="clear"
+                size="small"
+                color="success"
+                (click)="applyConfig(config)">
+                <ion-icon name="checkmark-outline" slot="icon-only"></ion-icon>
+              </ion-button>
+              <ion-button 
+                fill="clear"
+                size="small"
+                (click)="openEditModal(config)">
+                <ion-icon name="create-outline" slot="icon-only"></ion-icon>
+              </ion-button>
+              <ion-button 
+                fill="clear"
+                size="small"
+                color="danger"
+                (click)="deleteConfig(config)">
+                <ion-icon name="trash-outline" slot="icon-only"></ion-icon>
+              </ion-button>
+            </div>
+          </ion-item>
+        </ion-list>
+      </ion-card-content>
+    </ion-card>
+  </div>
+
+  <!-- FAB para crear configuración -->
+  <ion-fab vertical="bottom" horizontal="end" slot="fixed">
+    <ion-fab-button (click)="openCreateModal()">
+      <ion-icon name="add-outline"></ion-icon>
+    </ion-fab-button>
+  </ion-fab>
+
+  <!-- Modal crear/editar configuración -->
+  <ion-modal [isOpen]="isModalOpen" (willDismiss)="isModalOpen = false">
+    <ng-template>
+      <ion-header>
+        <ion-toolbar>
+          <ion-title>{{ isEditMode ? 'Editar Configuración' : 'Crear Configuración' }}</ion-title>
+          <ion-buttons slot="end">
+            <ion-button (click)="isModalOpen = false">
+              <ion-icon name="close-outline"></ion-icon>
+            </ion-button>
+          </ion-buttons>
+        </ion-toolbar>
+      </ion-header>
+      <ion-content class="ion-padding">
+        <ion-item *ngIf="templates.length > 0 && !isEditMode">
+          <ion-label position="stacked">Usar Plantilla (opcional)</ion-label>
+          <ion-select 
+            [(ngModel)]="configForm.template_id"
+            (ionChange)="onTemplateSelect(configForm.template_id)">
+            <ion-select-option [value]="0">Ninguna</ion-select-option>
+            <ion-select-option 
+              *ngFor="let template of templates" 
+              [value]="template.id">
+              {{ template.mod_name }} - {{ template.config_file_path }}
+            </ion-select-option>
+          </ion-select>
+        </ion-item>
+        <ion-item>
+          <ion-label position="stacked">Nombre del Mod *</ion-label>
+          <ion-input [(ngModel)]="configForm.mod_name"></ion-input>
+        </ion-item>
+        <ion-item>
+          <ion-label position="stacked">Ruta del Archivo de Config *</ion-label>
+          <ion-input [(ngModel)]="configForm.config_file_path" placeholder="config/mod.json"></ion-input>
+        </ion-item>
+        <ion-item>
+          <ion-label position="stacked">Contenido de Configuración *</ion-label>
+          <ion-textarea 
+            [(ngModel)]="configForm.config_content"
+            rows="15"
+            placeholder='{"key": "value"}'>
+          </ion-textarea>
+        </ion-item>
+        <ion-button 
+          expand="block" 
+          (click)="saveConfig()" 
+          class="ion-margin-top">
+          {{ isEditMode ? 'Actualizar' : 'Crear' }}
+        </ion-button>
+      </ion-content>
+    </ng-template>
+  </ion-modal>
+</ion-content>
+

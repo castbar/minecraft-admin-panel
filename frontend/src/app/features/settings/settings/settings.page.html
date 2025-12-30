@@ -1,0 +1,176 @@
+<ion-header>
+  <ion-toolbar>
+    <ion-title>Configuración</ion-title>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content>
+  <ion-segment [(ngModel)]="activeTab" (ionChange)="onTabChange($event)">
+    <ion-segment-button value="server">
+      <ion-label>Servidor</ion-label>
+    </ion-segment-button>
+    <ion-segment-button value="versions">
+      <ion-label>Versiones</ion-label>
+    </ion-segment-button>
+    <ion-segment-button value="users" *ngIf="authService.currentUser?.is_staff">
+      <ion-label>Usuarios</ion-label>
+    </ion-segment-button>
+    <ion-segment-button value="system">
+      <ion-label>Sistema</ion-label>
+    </ion-segment-button>
+  </ion-segment>
+
+  <!-- Tab Servidor -->
+  <div *ngIf="activeTab === 'server'">
+    <ion-card *ngIf="serverSettings && !loading">
+      <ion-card-header>
+        <ion-card-title>Configuración del Servidor</ion-card-title>
+      </ion-card-header>
+      <ion-card-content>
+        <ion-list>
+          <ion-item>
+            <ion-label position="stacked">Nombre</ion-label>
+            <ion-input [(ngModel)]="serverSettings.name"></ion-input>
+          </ion-item>
+          <ion-item>
+            <ion-label position="stacked">Host</ion-label>
+            <ion-input [(ngModel)]="serverSettings.host"></ion-input>
+          </ion-item>
+          <ion-item>
+            <ion-label position="stacked">Puerto</ion-label>
+            <ion-input type="number" [(ngModel)]="serverSettings.port"></ion-input>
+          </ion-item>
+          <ion-item>
+            <ion-label position="stacked">Max Jugadores</ion-label>
+            <ion-input type="number" [(ngModel)]="serverSettings.max_players"></ion-input>
+          </ion-item>
+          <ion-item>
+            <ion-label>Dificultad</ion-label>
+            <ion-select [(ngModel)]="serverSettings.difficulty">
+              <ion-select-option value="peaceful">Pacífico</ion-select-option>
+              <ion-select-option value="easy">Fácil</ion-select-option>
+              <ion-select-option value="normal">Normal</ion-select-option>
+              <ion-select-option value="hard">Difícil</ion-select-option>
+            </ion-select>
+          </ion-item>
+          <ion-item>
+            <ion-label>PvP Habilitado</ion-label>
+            <ion-toggle [(ngModel)]="serverSettings.pvp_enabled"></ion-toggle>
+          </ion-item>
+          <ion-item>
+            <ion-label>Whitelist Habilitada</ion-label>
+            <ion-toggle [(ngModel)]="serverSettings.whitelist_enabled"></ion-toggle>
+          </ion-item>
+        </ion-list>
+        <ion-button expand="block" (click)="saveServerSettings()" class="ion-margin-top">
+          Guardar Cambios
+        </ion-button>
+      </ion-card-content>
+    </ion-card>
+  </div>
+
+  <!-- Tab Versiones -->
+  <div *ngIf="activeTab === 'versions'">
+    <ion-card *ngIf="latestVersion">
+      <ion-card-header>
+        <ion-card-title>Última Versión</ion-card-title>
+      </ion-card-header>
+      <ion-card-content>
+        <h2>{{ latestVersion.version }}</h2>
+        <p>Tipo: {{ latestVersion.version_type }}</p>
+      </ion-card-content>
+    </ion-card>
+
+    <ion-list>
+      <ion-item *ngFor="let version of versions">
+        <ion-label>
+          <h2>{{ version.version }}</h2>
+          <p>{{ version.version_type }}</p>
+        </ion-label>
+        <ion-badge *ngIf="version.is_latest" color="success">Latest</ion-badge>
+      </ion-item>
+    </ion-list>
+  </div>
+
+  <!-- Tab Usuarios -->
+  <div *ngIf="activeTab === 'users' && authService.currentUser?.is_staff">
+    <ion-list>
+      <ion-item *ngFor="let user of djangoUsers">
+        <ion-label>
+          <h2>{{ user.username }}</h2>
+          <p>{{ user.email || 'Sin email' }}</p>
+        </ion-label>
+        <div slot="end">
+          <ion-badge *ngIf="user.is_staff" color="warning">Staff</ion-badge>
+          <ion-badge [color]="user.is_active ? 'success' : 'medium'">
+            {{ user.is_active ? 'Activo' : 'Inactivo' }}
+          </ion-badge>
+        </div>
+      </ion-item>
+    </ion-list>
+
+    <ion-fab vertical="bottom" horizontal="end" slot="fixed">
+      <ion-fab-button (click)="isCreateUserModalOpen = true">
+        <ion-icon name="add-outline"></ion-icon>
+      </ion-fab-button>
+    </ion-fab>
+  </div>
+
+  <!-- Tab Sistema -->
+  <div *ngIf="activeTab === 'system'">
+    <ion-card>
+      <ion-card-header>
+        <ion-card-title>Información del Sistema</ion-card-title>
+      </ion-card-header>
+      <ion-card-content>
+        <ion-list>
+          <ion-item>
+            <ion-label>
+              <h3>Versión de la Aplicación</h3>
+              <p>1.0.0</p>
+            </ion-label>
+          </ion-item>
+        </ion-list>
+      </ion-card-content>
+    </ion-card>
+  </div>
+
+  <!-- Modal Crear Usuario -->
+  <ion-modal [isOpen]="isCreateUserModalOpen" (willDismiss)="isCreateUserModalOpen = false">
+    <ng-template>
+      <ion-header>
+        <ion-toolbar>
+          <ion-title>Crear Usuario Django</ion-title>
+          <ion-buttons slot="end">
+            <ion-button (click)="isCreateUserModalOpen = false">Cerrar</ion-button>
+          </ion-buttons>
+        </ion-toolbar>
+      </ion-header>
+      <ion-content class="ion-padding">
+        <ion-item>
+          <ion-label position="stacked">Usuario *</ion-label>
+          <ion-input [(ngModel)]="newUser.username"></ion-input>
+        </ion-item>
+        <ion-item>
+          <ion-label position="stacked">Email</ion-label>
+          <ion-input type="email" [(ngModel)]="newUser.email"></ion-input>
+        </ion-item>
+        <ion-item>
+          <ion-label position="stacked">Contraseña *</ion-label>
+          <ion-input type="password" [(ngModel)]="newUser.password"></ion-input>
+        </ion-item>
+        <ion-item>
+          <ion-label>Es Staff</ion-label>
+          <ion-toggle [(ngModel)]="newUser.is_staff"></ion-toggle>
+        </ion-item>
+        <ion-item>
+          <ion-label>Activo</ion-label>
+          <ion-toggle [(ngModel)]="newUser.is_active"></ion-toggle>
+        </ion-item>
+        <ion-button expand="block" (click)="createUser()" class="ion-margin-top">
+          Crear Usuario
+        </ion-button>
+      </ion-content>
+    </ng-template>
+  </ion-modal>
+</ion-content>

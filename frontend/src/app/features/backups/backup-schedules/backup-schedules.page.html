@@ -1,0 +1,122 @@
+<ion-header>
+  <ion-toolbar>
+    <ion-title>Programación de Backups</ion-title>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content>
+  <div *ngIf="loading" class="loading-container">
+    <ion-spinner></ion-spinner>
+    <p>Cargando programaciones...</p>
+  </div>
+
+  <div *ngIf="!loading">
+    <!-- Lista de programaciones -->
+    <ion-card>
+      <ion-card-header>
+        <ion-card-title>
+          Programaciones ({{ schedules.length }})
+        </ion-card-title>
+      </ion-card-header>
+      <ion-card-content>
+        <div *ngIf="schedules.length === 0" class="empty-state">
+          <ion-icon name="calendar-outline" size="large"></ion-icon>
+          <p>No hay programaciones configuradas</p>
+        </div>
+
+        <ion-list *ngIf="schedules.length > 0">
+          <ion-item *ngFor="let schedule of schedules">
+            <ion-label>
+              <h2>{{ getScheduleTypeLabel(schedule.schedule_type) }}</h2>
+              <p>Hora: {{ schedule.schedule_time }}</p>
+              <p>Mantener: {{ schedule.keep_count }} backups</p>
+              <p *ngIf="schedule.last_run">Última ejecución: {{ formatDate(schedule.last_run) }}</p>
+              <p *ngIf="schedule.next_run">Próxima ejecución: {{ formatDate(schedule.next_run) }}</p>
+            </ion-label>
+            <div slot="end">
+              <ion-badge [color]="schedule.enabled ? 'success' : 'medium'">
+                {{ schedule.enabled ? 'Activo' : 'Inactivo' }}
+              </ion-badge>
+              <div class="schedule-actions">
+                <ion-button 
+                  fill="clear"
+                  size="small"
+                  (click)="openEditModal(schedule)">
+                  <ion-icon name="create-outline" slot="icon-only"></ion-icon>
+                </ion-button>
+                <ion-button 
+                  fill="clear"
+                  size="small"
+                  color="danger"
+                  (click)="deleteSchedule(schedule)">
+                  <ion-icon name="trash-outline" slot="icon-only"></ion-icon>
+                </ion-button>
+              </div>
+            </div>
+          </ion-item>
+        </ion-list>
+      </ion-card-content>
+    </ion-card>
+  </div>
+
+  <!-- FAB para crear programación -->
+  <ion-fab vertical="bottom" horizontal="end" slot="fixed">
+    <ion-fab-button (click)="openCreateModal()">
+      <ion-icon name="add-outline"></ion-icon>
+    </ion-fab-button>
+  </ion-fab>
+
+  <!-- Modal crear/editar programación -->
+  <ion-modal [isOpen]="isModalOpen" (willDismiss)="isModalOpen = false">
+    <ng-template>
+      <ion-header>
+        <ion-toolbar>
+          <ion-title>{{ isEditMode ? 'Editar Programación' : 'Crear Programación' }}</ion-title>
+          <ion-buttons slot="end">
+            <ion-button (click)="isModalOpen = false">
+              <ion-icon name="close-outline"></ion-icon>
+            </ion-button>
+          </ion-buttons>
+        </ion-toolbar>
+      </ion-header>
+      <ion-content class="ion-padding">
+        <ion-item>
+          <ion-label position="stacked">Tipo de Programación *</ion-label>
+          <ion-select [(ngModel)]="scheduleForm.schedule_type">
+            <ion-select-option value="daily">Diario</ion-select-option>
+            <ion-select-option value="weekly">Semanal</ion-select-option>
+            <ion-select-option value="monthly">Mensual</ion-select-option>
+          </ion-select>
+        </ion-item>
+        <ion-item>
+          <ion-label position="stacked">Hora *</ion-label>
+          <ion-datetime
+            [(ngModel)]="scheduleForm.schedule_time"
+            display-format="HH:mm"
+            picker-format="HH:mm">
+          </ion-datetime>
+        </ion-item>
+        <ion-item>
+          <ion-label position="stacked">Mantener Número de Backups</ion-label>
+          <ion-input 
+            type="number" 
+            [(ngModel)]="scheduleForm.keep_count"
+            min="1"
+            max="100">
+          </ion-input>
+        </ion-item>
+        <ion-item>
+          <ion-label>Habilitado</ion-label>
+          <ion-toggle [(ngModel)]="scheduleForm.enabled"></ion-toggle>
+        </ion-item>
+        <ion-button 
+          expand="block" 
+          (click)="saveSchedule()" 
+          class="ion-margin-top">
+          {{ isEditMode ? 'Actualizar' : 'Crear' }}
+        </ion-button>
+      </ion-content>
+    </ng-template>
+  </ion-modal>
+</ion-content>
+

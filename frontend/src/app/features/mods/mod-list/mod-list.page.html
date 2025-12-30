@@ -1,0 +1,170 @@
+<ion-header>
+  <ion-toolbar>
+    <ion-title>Mods</ion-title>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content>
+  <ion-segment [(ngModel)]="activeTab" (ionChange)="onTabChange($event.detail.value)">
+    <ion-segment-button value="installed">
+      <ion-label>Instalados</ion-label>
+    </ion-segment-button>
+    <ion-segment-button value="pool">
+      <ion-label>Pool</ion-label>
+    </ion-segment-button>
+    <ion-segment-button value="configs">
+      <ion-label>Configuraciones</ion-label>
+    </ion-segment-button>
+  </ion-segment>
+
+  <!-- Tab Instalados -->
+  <div *ngIf="activeTab === 'installed'">
+    <ion-searchbar
+      [(ngModel)]="installedSearchTerm"
+      (ionInput)="onInstalledSearch($event)"
+      placeholder="Buscar mods...">
+    </ion-searchbar>
+
+    <div *ngIf="loading" class="loading-container">
+      <ion-spinner></ion-spinner>
+    </div>
+
+    <ion-list *ngIf="!loading && filteredInstalledMods.length > 0">
+      <ion-item *ngFor="let mod of filteredInstalledMods" lines="full">
+        <ion-icon name="cube-outline" slot="start" color="primary"></ion-icon>
+        <ion-label>
+          <h2>{{ mod.name }}</h2>
+          <p>{{ mod.file_path }}</p>
+        </ion-label>
+        <div slot="end" class="item-actions">
+          <ion-badge [color]="mod.enabled ? 'success' : 'medium'">
+            {{ mod.enabled ? 'Habilitado' : 'Deshabilitado' }}
+          </ion-badge>
+          <ion-button fill="clear" size="small" (click)="toggleMod(mod)">
+            <ion-icon [name]="mod.enabled ? 'close-outline' : 'checkmark-outline'" slot="icon-only"></ion-icon>
+          </ion-button>
+          <ion-button *ngIf="mod.has_config" fill="clear" size="small" (click)="openConfigModal(mod)">
+            <ion-icon name="settings-outline" slot="icon-only"></ion-icon>
+          </ion-button>
+          <ion-button fill="clear" size="small" color="danger" (click)="deleteMod(mod)">
+            <ion-icon name="trash-outline" slot="icon-only"></ion-icon>
+          </ion-button>
+        </div>
+      </ion-item>
+    </ion-list>
+
+    <div *ngIf="!loading && filteredInstalledMods.length === 0" class="empty-state">
+      <ion-icon name="cube-outline" size="large"></ion-icon>
+      <h2>No hay mods instalados</h2>
+      <p>Sube tu primer mod usando el botón +</p>
+    </div>
+
+    <ion-fab vertical="bottom" horizontal="end" slot="fixed">
+      <ion-fab-button (click)="isUploadModalOpen = true">
+        <ion-icon name="add-outline"></ion-icon>
+      </ion-fab-button>
+    </ion-fab>
+  </div>
+
+  <!-- Tab Pool -->
+  <div *ngIf="activeTab === 'pool'">
+    <ion-searchbar
+      [(ngModel)]="poolSearchTerm"
+      (ionInput)="onPoolSearch($event)"
+      placeholder="Buscar en el pool...">
+    </ion-searchbar>
+
+    <div *ngIf="loading" class="loading-container">
+      <ion-spinner></ion-spinner>
+    </div>
+
+    <ion-list *ngIf="!loading && filteredPoolMods.length > 0">
+      <ion-item *ngFor="let mod of filteredPoolMods" lines="full">
+        <ion-icon name="cube-outline" slot="start" color="primary"></ion-icon>
+        <ion-label>
+          <h2>{{ mod.name }}</h2>
+          <p *ngIf="mod.description">{{ mod.description }}</p>
+          <div class="mod-info">
+            <ion-badge>{{ mod.category }}</ion-badge>
+            <ion-badge *ngFor="let type of mod.compatible_servers" color="success">{{ type }}</ion-badge>
+          </div>
+        </ion-label>
+        <ion-button *ngIf="mod.download_url" fill="clear" size="small" (click)="openDownload(mod.download_url!)">
+          <ion-icon name="download-outline" slot="icon-only"></ion-icon>
+        </ion-button>
+      </ion-item>
+    </ion-list>
+  </div>
+
+  <!-- Tab Configuraciones -->
+  <div *ngIf="activeTab === 'configs'">
+    <ion-list *ngIf="modsWithConfig.length > 0">
+      <ion-item *ngFor="let mod of modsWithConfig" button (click)="openConfigModal(mod)" lines="full">
+        <ion-icon name="settings-outline" slot="start"></ion-icon>
+        <ion-label>
+          <h2>{{ mod.name }}</h2>
+          <p>{{ mod.config_file_path }}</p>
+        </ion-label>
+      </ion-item>
+    </ion-list>
+
+    <div *ngIf="modsWithConfig.length === 0" class="empty-state">
+      <ion-icon name="settings-outline" size="large"></ion-icon>
+      <h2>No hay configuraciones disponibles</h2>
+      <p>Los mods con configuración aparecerán aquí</p>
+    </div>
+  </div>
+
+  <!-- Modal Subir Mod -->
+  <ion-modal [isOpen]="isUploadModalOpen" (willDismiss)="isUploadModalOpen = false">
+    <ng-template>
+      <ion-header>
+        <ion-toolbar>
+          <ion-title>Subir Mod</ion-title>
+          <ion-buttons slot="end">
+            <ion-button (click)="isUploadModalOpen = false">Cerrar</ion-button>
+          </ion-buttons>
+        </ion-toolbar>
+      </ion-header>
+      <ion-content class="ion-padding">
+        <input type="file" accept=".jar" (change)="onFileSelected($event)" #fileInput style="display: none;">
+        <ion-button expand="block" (click)="fileInput.click()">
+          Seleccionar archivo .jar
+        </ion-button>
+        <p *ngIf="uploadFile" class="ion-margin-top">Archivo seleccionado: {{ uploadFile.name }}</p>
+        <ion-button expand="block" (click)="uploadMod()" [disabled]="!uploadFile" class="ion-margin-top">
+          Subir Mod
+        </ion-button>
+      </ion-content>
+    </ng-template>
+  </ion-modal>
+
+  <!-- Modal Configuración -->
+  <ion-modal [isOpen]="isConfigModalOpen" (willDismiss)="isConfigModalOpen = false">
+    <ng-template>
+      <ion-header>
+        <ion-toolbar>
+          <ion-title>Configuración: {{ selectedModConfig?.mod_name }}</ion-title>
+          <ion-buttons slot="end">
+            <ion-button (click)="isConfigModalOpen = false">Cerrar</ion-button>
+          </ion-buttons>
+        </ion-toolbar>
+      </ion-header>
+      <ion-content class="ion-padding">
+        <ion-textarea
+          [(ngModel)]="configContent"
+          rows="20"
+          placeholder="Contenido de la configuración...">
+        </ion-textarea>
+        <div class="config-actions">
+          <ion-button expand="block" (click)="saveConfig()" class="ion-margin-top">
+            Guardar
+          </ion-button>
+          <ion-button expand="block" fill="outline" color="warning" (click)="resetConfig()" class="ion-margin-top">
+            Resetear a Default
+          </ion-button>
+        </div>
+      </ion-content>
+    </ng-template>
+  </ion-modal>
+</ion-content>

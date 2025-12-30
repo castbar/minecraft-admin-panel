@@ -1,0 +1,44 @@
+<div class="login-container">
+  <ion-card class="login-card">
+    <ion-card-header>
+      <ion-card-title>Iniciar Sesión</ion-card-title>
+    </ion-card-header>
+    <ion-card-content>
+      <form (ngSubmit)="login(); $event.preventDefault()" class="login-form">
+        <ion-item class="login-item" lines="full">
+          <ion-label position="stacked">Usuario</ion-label>
+          <ion-input
+            type="text"
+            [(ngModel)]="credentials.username"
+            name="username"
+            required
+            autocomplete="username"
+            placeholder="Ingresa tu usuario"
+            fill="outline">
+          </ion-input>
+        </ion-item>
+
+        <ion-item class="login-item" lines="full">
+          <ion-label position="stacked">Contraseña</ion-label>
+          <ion-input
+            type="password"
+            [(ngModel)]="credentials.password"
+            name="password"
+            required
+            autocomplete="current-password"
+            placeholder="Ingresa tu contraseña"
+            fill="outline">
+          </ion-input>
+        </ion-item>
+
+        <ion-button 
+          expand="block" 
+          type="submit" 
+          class="login-button">
+          Iniciar Sesión
+        </ion-button>
+      </form>
+    </ion-card-content>
+  </ion-card>
+</div>
+

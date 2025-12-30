@@ -1,0 +1,54 @@
+<div class="command-console">
+  <div class="console-header">
+    <h3>Consola de Comandos RCON</h3>
+    <ion-button 
+      size="small" 
+      fill="clear"
+      color="danger"
+      (click)="clearHistory()">
+      <ion-icon name="trash-outline"></ion-icon>
+      Limpiar
+    </ion-button>
+  </div>
+
+  <div class="console-output" #outputContainer>
+    <div 
+      *ngFor="let item of history" 
+      class="command-item"
+      [class.command-success]="item.success"
+      [class.command-error]="!item.success">
+      <div class="command-line">
+        <span class="timestamp">[{{ formatTimestamp(item.timestamp) }}]</span>
+        <span class="command-prefix">$</span>
+        <span class="command-text">{{ item.command }}</span>
+      </div>
+      <div class="command-output" *ngIf="item.output">
+        {{ item.output }}
+      </div>
+    </div>
+    <div *ngIf="history.length === 0" class="no-history">
+      No hay historial de comandos. Escribe un comando y presiona Enter.
+    </div>
+  </div>
+
+  <div class="console-input">
+    <ion-input
+      #commandInput
+      [(ngModel)]="command"
+      placeholder="Escribe un comando RCON (ej: list, say Hola, etc.)"
+      (keydown)="onKeyPress($event)"
+      [disabled]="isExecuting">
+    </ion-input>
+    <ion-button 
+      (click)="executeCommand()"
+      [disabled]="!command.trim() || isExecuting">
+      <ion-icon name="send-outline" slot="icon-only"></ion-icon>
+    </ion-button>
+  </div>
+
+  <div *ngIf="isExecuting" class="executing-indicator">
+    <ion-spinner size="small"></ion-spinner>
+    <span>Ejecutando comando...</span>
+  </div>
+</div>
+

@@ -1,0 +1,89 @@
+<ion-header>
+  <ion-toolbar>
+    <ion-title>Backups</ion-title>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content>
+  <div *ngIf="loading" class="loading-container">
+    <ion-spinner></ion-spinner>
+    <p>Cargando backups...</p>
+  </div>
+
+  <div *ngIf="!loading && backups.length === 0" class="empty-state">
+    <ion-icon name="folder-outline" size="large"></ion-icon>
+    <h2>No hay backups</h2>
+    <p>Crea tu primer backup usando el botón +</p>
+  </div>
+
+  <ion-list *ngIf="!loading && backups.length > 0">
+    <ion-item *ngFor="let backup of backups" lines="full">
+      <ion-icon name="folder-outline" slot="start" color="primary"></ion-icon>
+      <ion-label>
+        <h2>{{ backup.filename || backup.name || 'Backup' }}</h2>
+        <ion-badge *ngIf="backup.status" [color]="backup.status === 'completed' ? 'success' : backup.status === 'failed' ? 'danger' : 'warning'">
+          {{ backup.status }}
+        </ion-badge>
+        <p>
+          <ion-icon name="time-outline" size="small"></ion-icon>
+          {{ formatDate(backup.created_at) }}
+        </p>
+        <p>{{ formatBytes(backup.size || (backup.file_size_mb ? backup.file_size_mb * 1024 * 1024 : 0)) }}</p>
+      </ion-label>
+      <div slot="end" class="item-actions">
+        <ion-button 
+          fill="clear" 
+          size="small"
+          color="primary"
+          (click)="downloadBackup(backup)"
+          [disabled]="backup.status !== 'completed'">
+          <ion-icon name="download-outline" slot="icon-only"></ion-icon>
+        </ion-button>
+        <ion-button 
+          fill="clear" 
+          size="small"
+          color="success"
+          (click)="restoreBackup(backup)"
+          [disabled]="backup.status !== 'completed'">
+          <ion-icon name="refresh-outline" slot="icon-only"></ion-icon>
+        </ion-button>
+        <ion-button 
+          fill="clear" 
+          size="small"
+          color="danger"
+          (click)="deleteBackup(backup)">
+          <ion-icon name="trash-outline" slot="icon-only"></ion-icon>
+        </ion-button>
+      </div>
+    </ion-item>
+  </ion-list>
+
+  <!-- Modal Crear Backup -->
+  <ion-modal [isOpen]="isCreateModalOpen" (willDismiss)="isCreateModalOpen = false">
+    <ng-template>
+      <ion-header>
+        <ion-toolbar>
+          <ion-title>Crear Backup</ion-title>
+          <ion-buttons slot="end">
+            <ion-button (click)="isCreateModalOpen = false">Cerrar</ion-button>
+          </ion-buttons>
+        </ion-toolbar>
+      </ion-header>
+      <ion-content class="ion-padding">
+        <ion-item>
+          <ion-label position="stacked">Descripción (opcional)</ion-label>
+          <ion-input [(ngModel)]="backupDescription" placeholder="Descripción del backup"></ion-input>
+        </ion-item>
+        <ion-button expand="block" (click)="createBackup()" class="ion-margin-top">
+          Crear Backup
+        </ion-button>
+      </ion-content>
+    </ng-template>
+  </ion-modal>
+
+  <ion-fab vertical="bottom" horizontal="end" slot="fixed">
+    <ion-fab-button (click)="isCreateModalOpen = true">
+      <ion-icon name="add-outline"></ion-icon>
+    </ion-fab-button>
+  </ion-fab>
+</ion-content>

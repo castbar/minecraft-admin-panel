@@ -1,0 +1,178 @@
+<ion-header>
+  <ion-toolbar>
+    <ion-title>Gestión de Usuarios Django</ion-title>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content>
+  <div *ngIf="loading" class="loading-container">
+    <ion-spinner></ion-spinner>
+    <p>Cargando usuarios...</p>
+  </div>
+
+  <div *ngIf="!loading">
+    <!-- Búsqueda -->
+    <ion-card>
+      <ion-card-content>
+        <ion-searchbar
+          [(ngModel)]="searchTerm"
+          (ionInput)="onSearch($event)"
+          placeholder="Buscar usuarios...">
+        </ion-searchbar>
+      </ion-card-content>
+    </ion-card>
+
+    <!-- Lista de usuarios -->
+    <ion-card>
+      <ion-card-header>
+        <ion-card-title>
+          Usuarios ({{ filteredUsers.length }})
+        </ion-card-title>
+      </ion-card-header>
+      <ion-card-content>
+        <div *ngIf="filteredUsers.length === 0" class="empty-state">
+          <ion-icon name="people-outline" size="large"></ion-icon>
+          <p *ngIf="searchTerm">No se encontraron usuarios que coincidan con la búsqueda</p>
+          <p *ngIf="!searchTerm">No hay usuarios</p>
+        </div>
+
+        <ion-list *ngIf="filteredUsers.length > 0">
+          <ion-item *ngFor="let user of filteredUsers">
+            <ion-label>
+              <h2>{{ user.username }}</h2>
+              <p>{{ user.email || 'Sin email' }}</p>
+            </ion-label>
+            <div slot="end" class="user-badges">
+              <ion-badge *ngIf="user.is_staff" color="warning">Staff</ion-badge>
+              <ion-badge [color]="user.is_active ? 'success' : 'medium'">
+                {{ user.is_active ? 'Activo' : 'Inactivo' }}
+              </ion-badge>
+            </div>
+            <div slot="end" class="user-actions">
+              <ion-button 
+                fill="clear"
+                size="small"
+                (click)="openPasswordModal(user)">
+                <ion-icon name="lock-closed-outline" slot="icon-only"></ion-icon>
+              </ion-button>
+              <ion-button 
+                fill="clear"
+                size="small"
+                (click)="openEditModal(user)">
+                <ion-icon name="create-outline" slot="icon-only"></ion-icon>
+              </ion-button>
+              <ion-button 
+                fill="clear"
+                size="small"
+                color="danger"
+                [disabled]="user.id === authService.currentUser?.id"
+                (click)="deleteUser(user)">
+                <ion-icon name="trash-outline" slot="icon-only"></ion-icon>
+              </ion-button>
+            </div>
+          </ion-item>
+        </ion-list>
+      </ion-card-content>
+    </ion-card>
+  </div>
+
+  <!-- FAB para crear usuario -->
+  <ion-fab vertical="bottom" horizontal="end" slot="fixed">
+    <ion-fab-button (click)="openCreateModal()">
+      <ion-icon name="add-outline"></ion-icon>
+    </ion-fab-button>
+  </ion-fab>
+
+  <!-- Modal crear/editar usuario -->
+  <ion-modal [isOpen]="isModalOpen" (willDismiss)="isModalOpen = false">
+    <ng-template>
+      <ion-header>
+        <ion-toolbar>
+          <ion-title>{{ isEditMode ? 'Editar Usuario' : 'Crear Usuario' }}</ion-title>
+          <ion-buttons slot="end">
+            <ion-button (click)="isModalOpen = false">
+              <ion-icon name="close-outline"></ion-icon>
+            </ion-button>
+          </ion-buttons>
+        </ion-toolbar>
+      </ion-header>
+      <ion-content class="ion-padding">
+        <ion-item>
+          <ion-label position="stacked">Usuario *</ion-label>
+          <ion-input 
+            [(ngModel)]="userForm.username"
+            [disabled]="isEditMode">
+          </ion-input>
+        </ion-item>
+        <ion-item>
+          <ion-label position="stacked">Email</ion-label>
+          <ion-input 
+            type="email" 
+            [(ngModel)]="userForm.email">
+          </ion-input>
+        </ion-item>
+        <ion-item *ngIf="!isEditMode">
+          <ion-label position="stacked">Contraseña *</ion-label>
+          <ion-input 
+            type="password" 
+            [(ngModel)]="userForm.password">
+          </ion-input>
+        </ion-item>
+        <ion-item>
+          <ion-label>Es Staff</ion-label>
+          <ion-toggle [(ngModel)]="userForm.is_staff"></ion-toggle>
+        </ion-item>
+        <ion-item>
+          <ion-label>Activo</ion-label>
+          <ion-toggle [(ngModel)]="userForm.is_active"></ion-toggle>
+        </ion-item>
+        <ion-button 
+          expand="block" 
+          (click)="saveUser()" 
+          class="ion-margin-top">
+          {{ isEditMode ? 'Actualizar' : 'Crear' }}
+        </ion-button>
+      </ion-content>
+    </ng-template>
+  </ion-modal>
+
+  <!-- Modal cambiar contraseña -->
+  <ion-modal [isOpen]="isPasswordModalOpen" (willDismiss)="isPasswordModalOpen = false">
+    <ng-template>
+      <ion-header>
+        <ion-toolbar>
+          <ion-title>Cambiar Contraseña</ion-title>
+          <ion-buttons slot="end">
+            <ion-button (click)="isPasswordModalOpen = false">
+              <ion-icon name="close-outline"></ion-icon>
+            </ion-button>
+          </ion-buttons>
+        </ion-toolbar>
+      </ion-header>
+      <ion-content class="ion-padding">
+        <p *ngIf="currentUser">Cambiar contraseña para: <strong>{{ currentUser.username }}</strong></p>
+        <ion-item>
+          <ion-label position="stacked">Nueva Contraseña *</ion-label>
+          <ion-input 
+            type="password" 
+            [(ngModel)]="passwordForm.new_password">
+          </ion-input>
+        </ion-item>
+        <ion-item>
+          <ion-label position="stacked">Confirmar Contraseña *</ion-label>
+          <ion-input 
+            type="password" 
+            [(ngModel)]="passwordForm.confirm_password">
+          </ion-input>
+        </ion-item>
+        <ion-button 
+          expand="block" 
+          (click)="changePassword()" 
+          class="ion-margin-top">
+          Cambiar Contraseña
+        </ion-button>
+      </ion-content>
+    </ng-template>
+  </ion-modal>
+</ion-content>
+

@@ -1,0 +1,112 @@
+// Variables de tema para el login
+:host {
+  --login-card-max-width: 400px;
+  --login-spacing: 1rem;
+  --login-button-height: 48px;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+// Contenedor principal
+.login-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  min-height: 100%;
+  padding: var(--login-spacing);
+}
+
+// Card de login
+.login-card {
+  max-width: var(--login-card-max-width);
+  width: 100%;
+  margin: 0 auto;
+  --background: var(--ion-card-background, var(--ion-background-color));
+  --color: var(--ion-text-color);
+  box-shadow: var(--ion-card-box-shadow, 0 2px 8px rgba(0, 0, 0, 0.1));
+}
+
+.login-card ion-card-header {
+  text-align: center;
+  padding-bottom: calc(var(--login-spacing) * 0.5);
+}
+
+.login-card ion-card-title {
+  color: var(--ion-text-color);
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+// Formulario
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--login-spacing);
+  padding-top: calc(var(--login-spacing) * 0.5);
+}
+
+// Items del formulario - usando fill="outline" de Ionic
+.login-item {
+  --background: transparent;
+  --color: var(--ion-text-color);
+  --padding-start: 0;
+  --padding-end: 0;
+  --inner-padding-end: 0;
+  --inner-padding-start: 0;
+  margin-bottom: var(--login-spacing);
+  
+  // Label
+  ion-label {
+    --color: var(--ion-text-color);
+    font-weight: 500;
+    margin-bottom: 0.5rem;
+  }
+  
+  // Input con fill="outline" - Ionic maneja el estilo, solo ajustamos variables
+  ion-input {
+    --color: var(--ion-text-color);
+    --placeholder-color: var(--ion-color-medium);
+    --placeholder-opacity: 0.6;
+    
+    // Variables específicas para fill="outline"
+    --border-color: var(--ion-color-step-300, var(--ion-background-color-step-300));
+    --border-width: 1px;
+    --border-radius: 8px;
+    --padding-start: 16px;
+    --padding-end: 16px;
+    --highlight-color-focused: var(--ion-color-primary);
+    --highlight-color-valid: var(--ion-color-success);
+    --highlight-color-invalid: var(--ion-color-danger);
+    
+    // Asegurar que el texto sea visible
+    .native-input {
+      color: var(--ion-text-color) !important;
+    }
+  }
+}
+
+// Botón de login
+.login-button {
+  --background: var(--ion-color-primary);
+  --color: var(--ion-color-primary-contrast);
+  --border-radius: 8px;
+  --box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  height: var(--login-button-height);
+  margin-top: var(--login-spacing);
+  font-weight: 600;
+  text-transform: none;
+}
+
+// Responsive
+@media (max-width: 576px) {
+  .login-container {
+    padding: calc(var(--login-spacing) * 0.5);
+  }
+  
+  .login-card {
+    max-width: 100%;
+  }
+}
+

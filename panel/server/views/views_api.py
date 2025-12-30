@@ -19,7 +19,156 @@ from datetime import timedelta
 import docker
 
 def _get_rcon_connection(server):
-    """Conectar a RCON para un servidor específico"""
+    """Conectar a RCON para un servidor específico - Usa subprocess para evitar problemas con signals en threads"""
+    import subprocess
+    import socket
+    
+    class RconWrapper:
+        """Wrapper para RCON que usa subprocess para evitar problemas con signals"""
+        def __init__(self, host, port, password):
+            self.host = host
+            self.port = port
+            self.password = password
+            self.connected = False
+            
+        def connect(self):
+            """Verificar que podemos conectarnos al puerto RCON"""
+            try:
+                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                sock.settimeout(2)
+                result = sock.connect_ex((self.host, self.port))
+                sock.close()
+                if result == 0:
+                    self.connected = True
+                    return True
+                return False
+            except Exception as e:
+                print(f"Error checking RCON connection: {e}")
+                return False
+                
+        def command(self, cmd):
+            """Ejecutar comando RCON usando mcrcon library primero, luego socket como fallback"""
+            try:
+                # Intentar usar la librería mcrcon directamente primero (más confiable)
+                # pero capturar el error de signal y usar socket como fallback
+                try:
+                    rcon = mcrcon.MCRcon(self.host, self.password, port=self.port)
+                    rcon.connect()
+                    response = rcon.command(cmd)
+                    rcon.disconnect()
+                    return response
+                except ValueError as e:
+                    if "signal only works in main thread" in str(e):
+                        # Si falla por signal, usar socket directamente
+                        print(f"mcrcon library failed due to signal issue, using socket: {e}")
+                        return self._command_via_socket(cmd)
+                    raise
+                except Exception as e:
+                    # Si hay otro error con mcrcon, intentar socket
+                    print(f"mcrcon library failed, trying socket: {e}")
+                    return self._command_via_socket(cmd)
+            except Exception as e:
+                print(f"Error executing RCON command: {e}")
+                raise
+                
+        def _command_via_socket(self, cmd):
+            """Ejecutar comando RCON usando socket directamente (sin signals) - Implementación correcta del protocolo RCON"""
+            import struct
+            try:
+                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                sock.settimeout(10)
+                sock.connect((self.host, self.port))
+                
+                # Protocolo RCON: cada paquete tiene:
+                # - Length (4 bytes, little-endian): tamaño del resto del paquete (sin incluir este campo)
+                # - Request ID (4 bytes, little-endian)
+                # - Type (4 bytes, little-endian): 3 = AUTH, 2 = COMMAND, 0 = RESPONSE
+                # - Body (string null-terminated)
+                # - Null terminator (1 byte)
+                
+                # 1. Autenticación
+                request_id = 0
+                auth_type = 3  # AUTH
+                auth_body = (self.password + '\x00').encode('utf-8')
+                auth_packet_body = struct.pack('<ii', request_id, auth_type) + auth_body
+                auth_packet_length = struct.pack('<i', len(auth_packet_body))
+                auth_packet = auth_packet_length + auth_packet_body
+                
+                sock.sendall(auth_packet)
+                
+                # Recibir respuesta de autenticación
+                auth_response_length = struct.unpack('<i', sock.recv(4))[0]
+                auth_response = sock.recv(auth_response_length)
+                
+                if len(auth_response) < 8:
+                    raise Exception("Invalid authentication response")
+                
+                auth_resp_id, auth_resp_type = struct.unpack('<ii', auth_response[0:8])
+                
+                # Si request_id es -1, la autenticación falló
+                if auth_resp_id == -1:
+                    raise Exception("RCON authentication failed")
+                
+                # 2. Enviar comando
+                cmd_request_id = 1
+                cmd_type = 2  # COMMAND
+                cmd_body = (cmd + '\x00').encode('utf-8')
+                cmd_packet_body = struct.pack('<ii', cmd_request_id, cmd_type) + cmd_body
+                cmd_packet_length = struct.pack('<i', len(cmd_packet_body))
+                cmd_packet = cmd_packet_length + cmd_packet_body
+                
+                sock.sendall(cmd_packet)
+                
+                # 3. Recibir respuesta (puede venir en múltiples paquetes)
+                response_data = b''
+                while True:
+                    # Leer length
+                    length_bytes = sock.recv(4)
+                    if len(length_bytes) < 4:
+                        break
+                    
+                    length = struct.unpack('<i', length_bytes)[0]
+                    if length == 0:
+                        break
+                    
+                    # Leer el resto del paquete
+                    packet_data = b''
+                    while len(packet_data) < length:
+                        chunk = sock.recv(length - len(packet_data))
+                        if not chunk:
+                            break
+                        packet_data += chunk
+                    
+                    if len(packet_data) >= 8:
+                        resp_id, resp_type = struct.unpack('<ii', packet_data[0:8])
+                        # Si es el último paquete (type 0 y request_id coincide), o si recibimos menos datos
+                        if resp_type == 0 or len(packet_data) < length:
+                            if len(packet_data) > 8:
+                                response_data += packet_data[8:]
+                            break
+                        else:
+                            # Agregar el body de este paquete
+                            if len(packet_data) > 8:
+                                response_data += packet_data[8:]
+                
+                sock.close()
+                
+                # Parsear respuesta
+                if response_data:
+                    # Remover null terminators
+                    text = response_data.rstrip(b'\x00').decode('utf-8', errors='ignore')
+                    return text
+                return ""
+            except Exception as e:
+                print(f"Error in socket-based RCON: {e}")
+                import traceback
+                traceback.print_exc()
+                raise
+                
+        def disconnect(self):
+            """Cerrar conexión"""
+            self.connected = False
+    
     try:
         # Log para debugging
         print(f"🔌 Intentando conectar RCON: host={server.host}, port={server.rcon_port}")
@@ -28,10 +177,13 @@ def _get_rcon_connection(server):
         # Si es una IP, usar la IP
         host = server.host
         
-        rcon = mcrcon.MCRcon(host, server.rcon_password, port=server.rcon_port)
-        rcon.connect()
-        print(f"✅ RCON conectado exitosamente a {server.name} (host: {host})")
-        return rcon
+        rcon = RconWrapper(host, server.rcon_port, server.rcon_password)
+        if rcon.connect():
+            print(f"✅ RCON conectado exitosamente a {server.name} (host: {host})")
+            return rcon
+        else:
+            print(f"❌ No se pudo conectar a RCON para {server.name}")
+            return None
     except Exception as e:
         print(f"❌ RCON Error for {server.name}: {str(e)}")
         print(f"   Host: {server.host}, Port: {server.rcon_port}, Password: {'*' * len(server.rcon_password) if server.rcon_password else 'None'}")
@@ -129,12 +281,37 @@ def server_status(request, server_id=None):
     if error_response:
         return error_response
     
-    # Obtener estado del contenedor Docker
-    container_status = get_container_status(server.container_name) if server.container_name else None
+    # Obtener estado del contenedor Docker usando la librería docker de Python
+    container_status = None
+    is_running = False
     
-    # Intentar conectar vía RCON para verificar estado de Minecraft
-    rcon = _get_rcon_connection(server)
-    is_online = rcon is not None
+    if server.container_name:
+        try:
+            # Usar la librería docker de Python directamente
+            client = docker.from_env()
+            container = client.containers.get(server.container_name)
+            container_status = container.status
+            is_running = container_status == 'running'
+        except docker.errors.NotFound:
+            container_status = 'not_found'
+            is_running = False
+        except Exception as e:
+            print(f"Error getting container status for {server.container_name}: {e}")
+            # Fallback: intentar con get_container_status (puede fallar si no hay comando docker)
+            try:
+                container_status = get_container_status(server.container_name)
+                is_running = container_status == 'running' if container_status else False
+            except:
+                container_status = None
+                is_running = False
+    
+    # Intentar conectar vía RCON para verificar estado de Minecraft (solo si el contenedor está corriendo)
+    is_rcon_connected = False
+    rcon = None
+    if is_running:
+        rcon = _get_rcon_connection(server)
+        is_rcon_connected = rcon is not None
+    is_online = is_rcon_connected
     
     players = []
     player_count = 0
@@ -170,10 +347,19 @@ def server_status(request, server_id=None):
     memory_usage = None
     memory_max = None
     
-    if server.container_name and container_status:
+    if server.container_name and is_running:
         try:
-            client = docker.from_env()
-            container = client.containers.get(server.container_name)
+            # Reutilizar el cliente docker si ya lo tenemos, sino crear uno nuevo
+            try:
+                container = client.containers.get(server.container_name)
+            except NameError:
+                # Si client no existe, crearlo
+                client = docker.from_env()
+                container = client.containers.get(server.container_name)
+            except Exception:
+                # Si falla, crear un nuevo cliente
+                client = docker.from_env()
+                container = client.containers.get(server.container_name)
             stats = container.stats(stream=False)
             
             # Calcular CPU
@@ -192,6 +378,8 @@ def server_status(request, server_id=None):
         'success': True,
         'data': {
             'online': is_online,
+            'is_running': is_running,
+            'is_rcon_connected': is_rcon_connected,
             'players': players,
             'player_count': player_count,
             'max_players': max_players,
@@ -206,10 +394,247 @@ def server_status(request, server_id=None):
 
 @login_required
 @require_http_methods(["GET"])
-def server_stats(request, server_id=None):
-    """Obtener estadísticas históricas del servidor para gráficos - Requiere header X-Server-ID"""
-    from ..models.models_stats import ServerStatistic
+def players_online(request, server_id=None):
+    """Obtener lista de jugadores conectados - Requiere header X-Server-ID"""
+    resolved_server_id = _get_server_id_from_request(request) or server_id
+    if not resolved_server_id:
+        return JsonResponse({
+            'success': False, 
+            'error': 'Server ID required. Send header X-Server-ID: <id>'
+        }, status=400)
     
+    server, error_response = _check_server_permission(request, resolved_server_id, 'view')
+    if error_response:
+        return error_response
+    
+    rcon = _get_rcon_connection(server)
+    players = []
+    player_count = 0
+    max_players = 20
+    
+    print(f"players_online - RCON connection: {rcon is not None}")
+    
+    if rcon:
+        try:
+            response = rcon.command('list')
+            print(f"players_online - RCON list response: {response}")
+            
+            # Parsear jugadores
+            if 'online:' in response:
+                players_str = response.split('online:')[1].strip()
+                print(f"players_online - Players string: '{players_str}'")
+                if players_str:
+                    players = [p.strip() for p in players_str.split(',') if p.strip()]
+                    player_count = len(players)
+                    print(f"players_online - Parsed players: {players}, count: {player_count}")
+            else:
+                print(f"players_online - No 'online:' found in response")
+            
+            # Obtener max players
+            if 'of a max of' in response:
+                try:
+                    max_players = int(response.split('of a max of')[1].split()[0])
+                    print(f"players_online - Max players: {max_players}")
+                except Exception as e:
+                    print(f"players_online - Error parsing max players: {e}")
+            else:
+                print(f"players_online - No 'of a max of' found in response")
+        except Exception as e:
+            print(f"players_online - Exception: {e}")
+            import traceback
+            traceback.print_exc()
+            send_notification(server, 'rcon_error', f"Error al obtener lista de jugadores: {e}")
+        finally:
+            if rcon:
+                try:
+                    rcon.disconnect()
+                except Exception as e:
+                    print(f"players_online - Error disconnecting RCON: {e}")
+    else:
+        print(f"players_online - RCON connection failed for server {server.name} (host: {server.host}, port: {server.rcon_port})")
+    
+    print(f"players_online - Returning: players={players}, player_count={player_count}, max_players={max_players}")
+    
+    return JsonResponse({
+        'success': True,
+        'data': {
+            'players': players,
+            'player_count': player_count,
+            'max_players': max_players
+        }
+    })
+
+@login_required
+@require_http_methods(["GET"])
+def server_logs(request, server_id=None):
+    """Obtener logs recientes del servidor - Requiere header X-Server-ID"""
+    import os
+    import glob
+    import gzip
+    
+    resolved_server_id = _get_server_id_from_request(request) or server_id
+    if not resolved_server_id:
+        return JsonResponse({
+            'success': False, 
+            'error': 'Server ID required. Send header X-Server-ID: <id>'
+        }, status=400)
+    
+    server, error_response = _check_server_permission(request, resolved_server_id, 'view')
+    if error_response:
+        return error_response
+    
+    # Obtener número de líneas del parámetro (por defecto 100)
+    lines_param = request.GET.get('lines', '100')
+    try:
+        num_lines = int(lines_param)
+    except ValueError:
+        num_lines = 100
+    
+    try:
+        # Si el servidor tiene un container_name, leer logs desde el contenedor Docker
+        if server.container_name:
+            logs_path = os.path.join(server.minecraft_data_path, 'logs', 'latest.log')
+            print(f"🔍 server_logs - Container: {server.container_name}, Path: {logs_path}")
+            
+            # Intentar leer latest.log desde el contenedor usando la librería docker de Python
+            try:
+                # Verificar que el contenedor existe y está corriendo
+                container_status = get_container_status(server.container_name)
+                print(f"🔍 server_logs - Container status: {container_status}")
+                
+                # Intentar acceder al contenedor directamente, incluso si get_container_status falla
+                # porque puede que el contenedor esté en otra red o el método de verificación falle
+                try:
+                    client = docker.from_env()
+                    container = client.containers.get(server.container_name)
+                    container_status_actual = container.status
+                    print(f"🔍 server_logs - Direct container status: {container_status_actual}")
+                except Exception as e:
+                    print(f"⚠️ server_logs - Could not get container directly: {e}")
+                    container = None
+                
+                if container and (container_status == 'running' or container.status == 'running'):
+                    # Usar la librería docker de Python para ejecutar comandos en el contenedor
+                    try:
+                        print(f"🔍 server_logs - Connecting to Docker...")
+                        client = docker.from_env()
+                        container = client.containers.get(server.container_name)
+                        print(f"🔍 server_logs - Container found, executing tail...")
+                        
+                        # Ejecutar tail -n N en el contenedor
+                        exec_result = container.exec_run(
+                            f'tail -n {num_lines} {logs_path}',
+                            user='minecraft'
+                        )
+                        
+                        print(f"🔍 server_logs - Tail exit code: {exec_result.exit_code}")
+                        
+                        if exec_result.exit_code == 0:
+                            # Dividir en líneas y retornar
+                            lines = exec_result.output.decode('utf-8', errors='ignore').split('\n')
+                            # Filtrar líneas vacías al final
+                            while lines and not lines[-1]:
+                                lines.pop()
+                            print(f"🔍 server_logs - Returning {len(lines)} lines from container")
+                            return JsonResponse({'success': True, 'data': lines})
+                        else:
+                            print(f"🔍 server_logs - Tail failed, trying cat...")
+                            # Si tail falla, intentar leer el archivo completo con cat
+                            exec_result = container.exec_run(
+                                f'cat {logs_path}',
+                                user='minecraft'
+                            )
+                            
+                            print(f"🔍 server_logs - Cat exit code: {exec_result.exit_code}")
+                            
+                            if exec_result.exit_code == 0:
+                                lines = exec_result.output.decode('utf-8', errors='ignore').split('\n')
+                                # Filtrar líneas vacías al final
+                                while lines and not lines[-1]:
+                                    lines.pop()
+                                # Tomar las últimas N líneas
+                                recent_logs = lines[-num_lines:] if len(lines) > num_lines else lines
+                                print(f"🔍 server_logs - Returning {len(recent_logs)} lines from cat")
+                                return JsonResponse({'success': True, 'data': recent_logs})
+                            else:
+                                print(f"🔍 server_logs - Cat also failed, output: {exec_result.output.decode('utf-8', errors='ignore')[:200]}")
+                    except docker.errors.NotFound as e:
+                        print(f"❌ server_logs - Container {server.container_name} not found: {e}")
+                    except docker.errors.APIError as e:
+                        print(f"❌ server_logs - Docker API error: {e}")
+                    except Exception as e:
+                        print(f"❌ server_logs - Error reading logs from container: {e}")
+                        import traceback
+                        traceback.print_exc()
+                else:
+                    print(f"⚠️ server_logs - Container {server.container_name} is not running (status: {container_status})")
+            except Exception as e:
+                # Si falla docker, continuar con el método de sistema de archivos local
+                print(f"❌ server_logs - Error accessing Docker: {e}")
+                import traceback
+                traceback.print_exc()
+        else:
+            print(f"⚠️ server_logs - Server {server.id} has no container_name")
+        
+        # Fallback: intentar leer desde el sistema de archivos local
+        logs_dir = os.path.join(server.minecraft_data_path, 'logs')
+        latest_log = os.path.join(logs_dir, 'latest.log')
+        print(f"🔍 server_logs - Fallback: checking local filesystem at {latest_log}")
+        print(f"🔍 server_logs - File exists: {os.path.exists(latest_log)}")
+        
+        # Fallback: intentar leer desde el sistema de archivos local
+        logs_dir = os.path.join(server.minecraft_data_path, 'logs')
+        latest_log = os.path.join(logs_dir, 'latest.log')
+        
+        # Intentar leer latest.log primero
+        if os.path.exists(latest_log):
+            try:
+                with open(latest_log, 'r', encoding='utf-8', errors='ignore') as f:
+                    lines = f.readlines()
+                    recent_logs = lines[-num_lines:] if len(lines) > num_lines else lines
+                return JsonResponse({'success': True, 'data': recent_logs})
+            except Exception as e:
+                return JsonResponse({'success': False, 'error': f'Error reading log file: {str(e)}'}, status=500)
+        
+        # Si no existe latest.log, buscar el log más reciente
+        if os.path.exists(logs_dir):
+            log_files = glob.glob(os.path.join(logs_dir, '*.log'))
+            if not log_files:
+                # Buscar logs comprimidos
+                log_files = glob.glob(os.path.join(logs_dir, '*.log.gz'))
+                if log_files:
+                    # Ordenar por fecha de modificación
+                    log_files.sort(key=os.path.getmtime, reverse=True)
+                    # Leer el más reciente (descomprimir si es .gz)
+                    try:
+                        with gzip.open(log_files[0], 'rt', encoding='utf-8', errors='ignore') as f:
+                            lines = f.readlines()
+                            recent_logs = lines[-num_lines:] if len(lines) > num_lines else lines
+                        return JsonResponse({'success': True, 'data': recent_logs})
+                    except Exception as e:
+                        return JsonResponse({'success': False, 'error': f'Error reading compressed log: {str(e)}'}, status=500)
+            
+            if log_files:
+                # Ordenar por fecha de modificación
+                log_files.sort(key=os.path.getmtime, reverse=True)
+                try:
+                    with open(log_files[0], 'r', encoding='utf-8', errors='ignore') as f:
+                        lines = f.readlines()
+                        recent_logs = lines[-num_lines:] if len(lines) > num_lines else lines
+                    return JsonResponse({'success': True, 'data': recent_logs})
+                except Exception as e:
+                    return JsonResponse({'success': False, 'error': f'Error reading log file: {str(e)}'}, status=500)
+        
+        return JsonResponse({'success': False, 'error': 'Log file not found'}, status=404)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+
+@login_required
+@require_http_methods(["GET"])
+def server_stats(request, server_id=None):
+    """Obtener estadísticas actuales del servidor (CPU, memoria) - Requiere header X-Server-ID"""
     # Obtener server_id del header (método principal) o de la URL (compatibilidad)
     resolved_server_id = _get_server_id_from_request(request) or server_id
     if not resolved_server_id:
@@ -222,28 +647,59 @@ def server_stats(request, server_id=None):
     if error_response:
         return error_response
     
-    # Obtener estadísticas de las últimas 24 horas
-    since = timezone.now() - timedelta(hours=24)
-    stats = ServerStatistic.objects.filter(
-        server=server,
-        timestamp__gte=since
-    ).order_by('timestamp')
+    # Obtener estadísticas actuales del contenedor
+    cpu_usage = None
+    memory_usage = None
+    memory_max = None
     
-    # Preparar datos para gráficos
-    timestamps = [s.timestamp.isoformat() for s in stats]
-    players_data = [s.players_online for s in stats]
-    cpu_data = [s.cpu_usage if s.cpu_usage else 0 for s in stats]
-    memory_data = [round(s.memory_usage / (1024 * 1024), 2) if s.memory_usage else 0 for s in stats]
-    tps_data = [s.tps if s.tps else 20 for s in stats]
+    if server.container_name:
+        try:
+            print(f"🔍 server_stats - Obteniendo stats para contenedor: {server.container_name}")
+            client = docker.from_env()
+            container = client.containers.get(server.container_name)
+            print(f"🔍 server_stats - Estado del contenedor: {container.status}")
+            
+            if container.status == 'running':
+                print(f"🔍 server_stats - Contenedor corriendo, obteniendo stats...")
+                stats = container.stats(stream=False)
+                
+                # Calcular CPU
+                if 'cpu_stats' in stats and 'precpu_stats' in stats:
+                    cpu_delta = stats['cpu_stats']['cpu_usage']['total_usage'] - stats['precpu_stats']['cpu_usage']['total_usage']
+                    system_delta = stats['cpu_stats']['system_cpu_usage'] - stats['precpu_stats']['system_cpu_usage']
+                    if system_delta > 0:
+                        num_cores = len(stats['cpu_stats']['cpu_usage'].get('percpu_usage', [1]))
+                        cpu_usage = (cpu_delta / system_delta) * num_cores * 100
+                        print(f"🔍 server_stats - CPU calculado: {cpu_usage}%")
+                
+                # Calcular memoria
+                if 'memory_stats' in stats:
+                    memory_usage = stats['memory_stats'].get('usage', 0)
+                    memory_max = stats['memory_stats'].get('limit', 0)
+                    print(f"🔍 server_stats - Memoria: {memory_usage} / {memory_max}")
+            else:
+                print(f"⚠️ server_stats - Contenedor no está corriendo (status: {container.status})")
+        except docker.errors.NotFound:
+            print(f"❌ server_stats - Contenedor {server.container_name} no encontrado")
+        except Exception as e:
+            print(f"❌ server_stats - Error obteniendo stats del contenedor: {e}")
+            import traceback
+            traceback.print_exc()
+    
+    # Calcular porcentaje de memoria
+    memory_percent = None
+    if memory_usage and memory_max and memory_max > 0:
+        memory_percent = round((memory_usage / memory_max) * 100, 2)
     
     return JsonResponse({
         'success': True,
         'data': {
-            'timestamps': timestamps,
-            'players': players_data,
-            'cpu': cpu_data,
-            'memory': memory_data,
-            'tps': tps_data,
+            'cpu_usage': round(cpu_usage, 2) if cpu_usage else None,
+            'memory_usage': memory_usage,
+            'memory_max': memory_max,
+            'memory_usage_mb': round(memory_usage / (1024 * 1024), 2) if memory_usage else None,
+            'memory_max_mb': round(memory_max / (1024 * 1024), 2) if memory_max else None,
+            'memory_percent': memory_percent,
         }
     })
 
@@ -463,41 +919,93 @@ def whitelist_list(request, server_id=None):
     if rcon:
         try:
             response = rcon.command('whitelist list')
-            # Parsear respuesta: "There are X whitelisted players: player1, player2"
+            print(f"RCON whitelist list response: {response}")
+            # Parsear respuesta: "There are X whitelisted player(s): player1, player2"
+            # También puede ser: "There are X whitelisted player(s):" (sin jugadores)
             players = []
-            if ': ' in response:
-                players_str = response.split(': ')[1].strip()
-                if players_str and players_str != '':
-                    players = [p.strip() for p in players_str.split(',') if p.strip()]
+            
+            # Usar regex para extraer solo los nombres de jugadores después de ": "
+            import re
+            # Patrón: buscar ": " seguido de nombres separados por comas
+            match = re.search(r':\s*([^:]+)$', response)
+            if match:
+                players_str = match.group(1).strip()
+                if players_str:
+                    # Separar por comas, limpiar espacios y filtrar vacíos
+                    players = [p.strip() for p in players_str.split(',') if p.strip() and not p.strip().startswith('There are')]
+            
+            # Si no se encontraron con el primer método, intentar otro patrón
+            if not players:
+                # Buscar directamente después de "player(s):"
+                match = re.search(r'player\(s\):\s*(.+)', response, re.IGNORECASE)
+                if match:
+                    players_str = match.group(1).strip()
+                    if players_str:
+                        players = [p.strip() for p in players_str.split(',') if p.strip() and not p.strip().startswith('There are')]
+            
+            # Eliminar duplicados manteniendo el orden
+            seen = set()
+            unique_players = []
+            for p in players:
+                if p not in seen:
+                    seen.add(p)
+                    unique_players.append(p)
+            players = unique_players
             
             # Convertir a formato esperado por el frontend
             whitelist_data = [{'name': p, 'uuid': ''} for p in players]
+            print(f"Parsed whitelist data: {whitelist_data} (total: {len(whitelist_data)})")
             return JsonResponse({'success': True, 'data': whitelist_data})
         except Exception as e:
             print(f"Error obteniendo whitelist vía RCON: {e}")
             import traceback
             traceback.print_exc()
+            # Continuar al fallback
         finally:
             try:
                 rcon.disconnect()
             except:
                 pass
+    else:
+        print(f"RCON connection failed for server {server.name} (host: {server.host}, port: {server.rcon_port})")
     
     # Fallback: leer archivo whitelist.json
     whitelist_path = os.path.join(server.minecraft_data_path, 'whitelist.json')
+    print(f"Trying to read whitelist file: {whitelist_path}")
     
     try:
         if os.path.exists(whitelist_path):
             with open(whitelist_path, 'r') as f:
                 whitelist = json.load(f)
+            print(f"Whitelist file content: {whitelist}")
             # Asegurar que es una lista de objetos con 'name'
             if isinstance(whitelist, list):
-                return JsonResponse({'success': True, 'data': whitelist})
+                # Si los objetos tienen 'name', usarlos directamente
+                # Si son strings, convertirlos a objetos
+                formatted_whitelist = []
+                for item in whitelist:
+                    if isinstance(item, dict):
+                        formatted_whitelist.append({
+                            'name': item.get('name', ''),
+                            'uuid': item.get('uuid', '')
+                        })
+                    elif isinstance(item, str):
+                        formatted_whitelist.append({
+                            'name': item,
+                            'uuid': ''
+                        })
+                return JsonResponse({'success': True, 'data': formatted_whitelist})
             else:
+                print(f"Whitelist file is not a list: {type(whitelist)}")
                 return JsonResponse({'success': True, 'data': []})
         else:
+            print(f"Whitelist file does not exist: {whitelist_path}")
+            # Si no hay archivo y RCON falló, devolver lista vacía
             return JsonResponse({'success': True, 'data': []})
     except Exception as e:
+        print(f"Error reading whitelist file: {e}")
+        import traceback
+        traceback.print_exc()
         return JsonResponse({'success': False, 'error': str(e)}, status=500)
 
 @csrf_exempt

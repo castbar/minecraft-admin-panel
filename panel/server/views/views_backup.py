@@ -85,6 +85,52 @@ def backup_restore(request, server_id, backup_id):
 @login_required
 @require_server_permission('view')
 @require_http_methods(["GET"])
+def backup_download(request, server_id, backup_id):
+    """Descargar backup"""
+    from django.http import FileResponse
+    
+    server = request.server
+    
+    try:
+        backup = Backup.objects.get(id=backup_id, server=server)
+    except Backup.DoesNotExist:
+        return JsonResponse({'success': False, 'error': 'Backup not found'}, status=404)
+    
+    if backup.status != 'completed':
+        return JsonResponse({'success': False, 'error': 'Backup not completed'}, status=400)
+    
+    if not backup.file_path or not os.path.exists(backup.file_path):
+        return JsonResponse({'success': False, 'error': 'Backup file not found'}, status=404)
+    
+    return FileResponse(
+        open(backup.file_path, 'rb'),
+        as_attachment=True,
+        filename=f"{backup.name}.tar.gz"
+    )
+
+@csrf_exempt
+@login_required
+@require_server_permission('control_server')
+@require_http_methods(["DELETE"])
+def backup_delete(request, server_id, backup_id):
+    """Eliminar backup"""
+    server = request.server
+    
+    try:
+        backup = Backup.objects.get(id=backup_id, server=server)
+        
+        # Eliminar archivo si existe
+        if backup.file_path and os.path.exists(backup.file_path):
+            os.remove(backup.file_path)
+        
+        backup.delete()
+        return JsonResponse({'success': True, 'message': 'Backup eliminado'})
+    except Backup.DoesNotExist:
+        return JsonResponse({'success': False, 'error': 'Backup not found'}, status=404)
+
+@login_required
+@require_server_permission('view')
+@require_http_methods(["GET"])
 def backup_schedules_list(request, server_id):
     """Listar programaciones de backups"""
     server = request.server
@@ -93,14 +139,127 @@ def backup_schedules_list(request, server_id):
     data = [{
         'id': s.id,
         'name': s.name,
+        'schedule_type': s.frequency,  # Compatibilidad con frontend
         'frequency': s.frequency,
+        'schedule_time': s.time.strftime('%H:%M') if s.time else None,
         'time': s.time.strftime('%H:%M') if s.time else None,
+        'enabled': s.is_active,
         'is_active': s.is_active,
+        'keep_count': s.max_backups,
         'max_backups': s.max_backups,
         'last_run': s.last_run.isoformat() if s.last_run else None,
+        'next_run': None,  # TODO: Calcular próxima ejecución
     } for s in schedules]
     
     return JsonResponse({'success': True, 'data': data})
+
+@csrf_exempt
+@login_required
+@require_server_permission('control_server')
+@require_http_methods(["POST"])
+def backup_schedule_create(request, server_id):
+    """Crear programación de backup"""
+    server = request.server
+    
+    try:
+        data = json.loads(request.body)
+        schedule_type = data.get('schedule_type', 'daily')
+        schedule_time = data.get('schedule_time', '00:00')
+        keep_count = data.get('keep_count', 5)
+        enabled = data.get('enabled', True)
+        name = data.get('name', f"Schedule_{timezone.now().strftime('%Y%m%d_%H%M%S')}")
+        
+        # Parsear hora
+        try:
+            time_obj = datetime.strptime(schedule_time, '%H:%M').time()
+        except:
+            time_obj = datetime.strptime('00:00', '%H:%M').time()
+        
+        schedule = BackupSchedule.objects.create(
+            server=server,
+            name=name,
+            frequency=schedule_type,
+            time=time_obj,
+            is_active=enabled,
+            max_backups=keep_count
+        )
+        
+        return JsonResponse({
+            'success': True,
+            'message': 'Programación creada',
+            'data': {
+                'id': schedule.id,
+                'name': schedule.name,
+                'schedule_type': schedule.frequency,
+                'schedule_time': schedule.time.strftime('%H:%M'),
+                'enabled': schedule.is_active,
+                'keep_count': schedule.max_backups
+            }
+        })
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)}, status=400)
+
+@csrf_exempt
+@login_required
+@require_server_permission('control_server')
+@require_http_methods(["PUT"])
+def backup_schedule_update(request, server_id, schedule_id):
+    """Actualizar programación de backup"""
+    server = request.server
+    
+    try:
+        schedule = BackupSchedule.objects.get(id=schedule_id, server=server)
+    except BackupSchedule.DoesNotExist:
+        return JsonResponse({'success': False, 'error': 'Schedule not found'}, status=404)
+    
+    try:
+        data = json.loads(request.body)
+        
+        if 'schedule_type' in data:
+            schedule.frequency = data['schedule_type']
+        if 'schedule_time' in data:
+            try:
+                schedule.time = datetime.strptime(data['schedule_time'], '%H:%M').time()
+            except:
+                pass
+        if 'keep_count' in data:
+            schedule.max_backups = data['keep_count']
+        if 'enabled' in data:
+            schedule.is_active = data['enabled']
+        if 'name' in data:
+            schedule.name = data['name']
+        
+        schedule.save()
+        
+        return JsonResponse({
+            'success': True,
+            'message': 'Programación actualizada',
+            'data': {
+                'id': schedule.id,
+                'name': schedule.name,
+                'schedule_type': schedule.frequency,
+                'schedule_time': schedule.time.strftime('%H:%M') if schedule.time else None,
+                'enabled': schedule.is_active,
+                'keep_count': schedule.max_backups
+            }
+        })
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)}, status=400)
+
+@csrf_exempt
+@login_required
+@require_server_permission('control_server')
+@require_http_methods(["DELETE"])
+def backup_schedule_delete(request, server_id, schedule_id):
+    """Eliminar programación de backup"""
+    server = request.server
+    
+    try:
+        schedule = BackupSchedule.objects.get(id=schedule_id, server=server)
+        schedule.delete()
+        return JsonResponse({'success': True, 'message': 'Programación eliminada'})
+    except BackupSchedule.DoesNotExist:
+        return JsonResponse({'success': False, 'error': 'Schedule not found'}, status=404)
 
 def _execute_backup(backup_id):
     """Ejecutar backup en background"""

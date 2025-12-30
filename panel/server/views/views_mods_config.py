@@ -441,3 +441,99 @@ def server_mod_configs_apply_all(request, server_id=None):
         }
     })
 
+@csrf_exempt
+@login_required
+@require_http_methods(["PUT"])
+def server_mod_config_update(request, server_id=None, config_id=None):
+    """
+    Actualizar configuración de mod para un servidor - Requiere header X-Server-ID
+    """
+    resolved_server_id = _get_server_id_from_request(request) or server_id
+    if not resolved_server_id:
+        return JsonResponse({
+            'success': False, 
+            'error': 'Server ID required. Send header X-Server-ID: <id>'
+        }, status=400)
+    
+    try:
+        server = get_object_or_404(Server, id=resolved_server_id, is_active=True)
+    except Server.DoesNotExist:
+        return JsonResponse({'success': False, 'error': 'Server not found'}, status=404)
+    
+    user_role = UserServerRole.objects.filter(user=request.user, server=server).first()
+    if not user_role:
+        return JsonResponse({'success': False, 'error': 'No access to this server'}, status=403)
+    
+    if not user_role.has_permission('manage_mods'):
+        return JsonResponse({'success': False, 'error': 'Permission denied: manage_mods required'}, status=403)
+    
+    config = get_object_or_404(ServerModConfig, id=config_id, server=server)
+    
+    try:
+        data = json.loads(request.body)
+        
+        if 'config_content' in data:
+            config_content = data['config_content']
+            # Validar formato JSON si es JSON
+            if config.mod_template.config_format == 'json' and config_content:
+                try:
+                    json.loads(config_content)
+                except json.JSONDecodeError:
+                    return JsonResponse({'success': False, 'error': 'Invalid JSON in config_content'}, status=400)
+            config.config_content = config_content
+        
+        if 'is_enabled' in data:
+            config.is_enabled = data['is_enabled']
+        
+        config.save()
+        
+        return JsonResponse({
+            'success': True,
+            'message': f'Mod config updated for {config.mod_template.display_name}',
+            'data': {
+                'id': config.id,
+                'mod_template': {
+                    'id': config.mod_template.id,
+                    'display_name': config.mod_template.display_name,
+                },
+                'is_enabled': config.is_enabled,
+            }
+        })
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+
+@csrf_exempt
+@login_required
+@require_http_methods(["DELETE"])
+def server_mod_config_delete(request, server_id=None, config_id=None):
+    """
+    Eliminar configuración de mod para un servidor - Requiere header X-Server-ID
+    """
+    resolved_server_id = _get_server_id_from_request(request) or server_id
+    if not resolved_server_id:
+        return JsonResponse({
+            'success': False, 
+            'error': 'Server ID required. Send header X-Server-ID: <id>'
+        }, status=400)
+    
+    try:
+        server = get_object_or_404(Server, id=resolved_server_id, is_active=True)
+    except Server.DoesNotExist:
+        return JsonResponse({'success': False, 'error': 'Server not found'}, status=404)
+    
+    user_role = UserServerRole.objects.filter(user=request.user, server=server).first()
+    if not user_role:
+        return JsonResponse({'success': False, 'error': 'No access to this server'}, status=403)
+    
+    if not user_role.has_permission('manage_mods'):
+        return JsonResponse({'success': False, 'error': 'Permission denied: manage_mods required'}, status=403)
+    
+    config = get_object_or_404(ServerModConfig, id=config_id, server=server)
+    config_name = config.mod_template.display_name
+    config.delete()
+    
+    return JsonResponse({
+        'success': True,
+        'message': f'Mod config for {config_name} deleted'
+    })
+

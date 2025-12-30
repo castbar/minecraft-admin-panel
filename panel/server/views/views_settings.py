@@ -187,22 +187,135 @@ def _apply_server_settings(server, data=None):
 @require_server_permission('manage_users')
 @require_http_methods(["GET"])
 def minecraft_users_list(request, server_id):
-    """Listar usuarios de Minecraft en base de datos"""
+    """Listar usuarios de Minecraft en base de datos o whitelist según el modo de autenticación"""
     server = request.server
     
+    # Si el servidor usa whitelist, devolver usuarios de la whitelist
+    if server.auth_mode == 'whitelist':
+        # Obtener usuarios de la whitelist vía RCON
+        try:
+            from .views_api import _get_rcon_connection
+            rcon = _get_rcon_connection(server)
+            print(f"minecraft_users_list - RCON connection: {rcon is not None}")
+            if rcon:
+                try:
+                    print(f"minecraft_users_list - Executing whitelist list command...")
+                    response = rcon.command('whitelist list')
+                    print(f"minecraft_users_list - RCON response: {response}")
+                    print(f"minecraft_users_list - Response type: {type(response)}")
+                    print(f"minecraft_users_list - Response length: {len(response) if response else 0}")
+                    # Parsear respuesta: "There are X whitelisted player(s): player1, player2"
+                    import re
+                    players = []
+                    
+                    # Buscar el patrón ": " seguido de la lista de jugadores
+                    # Ejemplo: "There are 10 whitelisted player(s): Chrsx3, carlitorts, Mathi"
+                    match = re.search(r':\s*([^:]+)$', response)
+                    if match:
+                        players_str = match.group(1).strip()
+                        if players_str:
+                            # Separar por comas y limpiar cada nombre
+                            raw_players = [p.strip() for p in players_str.split(',') if p.strip()]
+                            # Filtrar cualquier texto que no sea un nombre válido
+                            for p in raw_players:
+                                # Limpiar cualquier texto extra que pueda estar pegado al nombre
+                                # Remover cualquier parte que contenga "There are" o números solos
+                                clean_name = re.sub(r'\s*There are.*$', '', p, flags=re.IGNORECASE)
+                                clean_name = re.sub(r'^\d+\s+whitelisted.*?:\s*', '', clean_name, flags=re.IGNORECASE)
+                                clean_name = clean_name.strip()
+                                # Solo agregar si es un nombre válido (no vacío, no solo números, no contiene "There are")
+                                if clean_name and not re.match(r'^\d+$', clean_name) and 'There are' not in clean_name:
+                                    players.append(clean_name)
+                    
+                    # Si no se encontraron con el primer método, intentar otro patrón
+                    if not players:
+                        # Buscar directamente después de "player(s):"
+                        match = re.search(r'player\(s\):\s*(.+)', response, re.IGNORECASE)
+                        if match:
+                            players_str = match.group(1).strip()
+                            if players_str:
+                                raw_players = [p.strip() for p in players_str.split(',') if p.strip()]
+                                for p in raw_players:
+                                    clean_name = re.sub(r'\s*There are.*$', '', p, flags=re.IGNORECASE)
+                                    clean_name = clean_name.strip()
+                                    if clean_name and not re.match(r'^\d+$', clean_name) and 'There are' not in clean_name:
+                                        players.append(clean_name)
+                    
+                    # Eliminar duplicados manteniendo el orden (comparación case-insensitive)
+                    seen = set()
+                    unique_players = []
+                    for p in players:
+                        p_lower = p.lower()
+                        if p_lower not in seen:
+                            seen.add(p_lower)
+                            unique_players.append(p)
+                    players = unique_players
+                    
+                    # Convertir a formato esperado por el frontend (similar a usuarios de BD)
+                    whitelist_users = []
+                    for idx, player_name in enumerate(players):
+                        whitelist_users.append({
+                            'id': idx + 1,  # ID temporal basado en índice
+                            'username': player_name,
+                            'is_active': True,
+                            'last_login': None,
+                            'created_at': None,
+                            'source': 'whitelist'  # Indicar que viene de whitelist
+                        })
+                    
+                    return JsonResponse({
+                        'success': True,
+                        'data': whitelist_users,
+                        'message': 'Users from whitelist (server uses whitelist authentication mode)'
+                    })
+                except Exception as e:
+                    print(f"Error getting whitelist via RCON: {e}")
+                    import traceback
+                    traceback.print_exc()
+                finally:
+                    try:
+                        rcon.disconnect()
+                    except:
+                        pass
+            
+            # Si RCON falla, devolver lista vacía con más información de debug
+            print(f"RCON connection failed for server {server.name} (host: {server.host}, port: {server.rcon_port})")
+            import traceback
+            traceback.print_exc()
+            return JsonResponse({
+                'success': True,
+                'data': [],
+                'message': f'Could not retrieve whitelist users (RCON connection failed for {server.name})'
+            })
+        except Exception as e:
+            print(f"Error in whitelist users retrieval: {e}")
+            return JsonResponse({
+                'success': True,
+                'data': [],
+                'message': f'Error retrieving whitelist users: {str(e)}'
+            })
+    
+    # Si el servidor no usa autenticación por base de datos, devolver lista vacía
     if server.auth_mode not in ['database', 'both']:
         return JsonResponse({
-            'success': False,
-            'error': 'Server does not use database authentication'
-        }, status=400)
+            'success': True,
+            'data': [],
+            'message': f'Server uses {server.auth_mode} authentication mode, database users not available'
+        })
     
+    # Servidor usa database o both - devolver usuarios de la base de datos
     users = MinecraftUser.objects.filter(server=server).values(
         'id', 'username', 'is_active', 'last_login', 'created_at'
     )
     
+    # Agregar campo source para indicar que vienen de la base de datos
+    users_list = list(users)
+    for user in users_list:
+        user['source'] = 'database'
+    
     return JsonResponse({
         'success': True,
-        'data': list(users)
+        'data': users_list
     })
 
 def _send_password_set_email(user, token):

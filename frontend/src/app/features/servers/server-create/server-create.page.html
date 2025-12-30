@@ -1,0 +1,77 @@
+<ion-header>
+  <ion-toolbar>
+    <ion-title>Crear Servidor</ion-title>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content>
+  <ion-card>
+    <ion-card-header>
+      <ion-card-title>Nuevo Servidor Minecraft</ion-card-title>
+    </ion-card-header>
+    <ion-card-content>
+      <ion-list>
+        <ion-item>
+          <ion-label position="stacked">Nombre *</ion-label>
+          <ion-input [(ngModel)]="serverData.name" placeholder="Mi Servidor"></ion-input>
+        </ion-item>
+        <ion-item>
+          <ion-label position="stacked">Host *</ion-label>
+          <ion-input [(ngModel)]="serverData.host" placeholder="localhost o IP"></ion-input>
+        </ion-item>
+        <ion-item>
+          <ion-label position="stacked">Puerto</ion-label>
+          <ion-input type="number" [(ngModel)]="serverData.port"></ion-input>
+        </ion-item>
+        <ion-item>
+          <ion-label position="stacked">Puerto RCON</ion-label>
+          <ion-input type="number" [(ngModel)]="serverData.rcon_port"></ion-input>
+        </ion-item>
+        <ion-item>
+          <ion-label position="stacked">Contraseña RCON</ion-label>
+          <ion-input type="password" [(ngModel)]="serverData.rcon_password"></ion-input>
+        </ion-item>
+        <ion-item>
+          <ion-label>Tipo de Servidor</ion-label>
+          <ion-select [(ngModel)]="serverData.server_type">
+            <ion-select-option value="vanilla">Vanilla</ion-select-option>
+            <ion-select-option value="fabric">Fabric</ion-select-option>
+            <ion-select-option value="forge">Forge</ion-select-option>
+            <ion-select-option value="bukkit">Bukkit</ion-select-option>
+            <ion-select-option value="spigot">Spigot</ion-select-option>
+            <ion-select-option value="paper">Paper</ion-select-option>
+          </ion-select>
+        </ion-item>
+        <ion-item>
+          <ion-label position="stacked">Versión</ion-label>
+          <ion-input [(ngModel)]="serverData.version" placeholder="latest o 1.20.1"></ion-input>
+        </ion-item>
+        <ion-item>
+          <ion-label position="stacked">Max Jugadores</ion-label>
+          <ion-input type="number" [(ngModel)]="serverData.max_players"></ion-input>
+        </ion-item>
+        <ion-item>
+          <ion-label>Dificultad</ion-label>
+          <ion-select [(ngModel)]="serverData.difficulty">
+            <ion-select-option value="peaceful">Pacífico</ion-select-option>
+            <ion-select-option value="easy">Fácil</ion-select-option>
+            <ion-select-option value="normal">Normal</ion-select-option>
+            <ion-select-option value="hard">Difícil</ion-select-option>
+          </ion-select>
+        </ion-item>
+        <ion-item>
+          <ion-label>PvP Habilitado</ion-label>
+          <ion-toggle [(ngModel)]="serverData.pvp_enabled"></ion-toggle>
+        </ion-item>
+        <ion-item>
+          <ion-label>Whitelist Habilitada</ion-label>
+          <ion-toggle [(ngModel)]="serverData.whitelist_enabled"></ion-toggle>
+        </ion-item>
+      </ion-list>
+      <ion-button expand="block" (click)="createServer()" class="ion-margin-top">
+        Crear Servidor
+      </ion-button>
+    </ion-card-content>
+  </ion-card>
+</ion-content>
+

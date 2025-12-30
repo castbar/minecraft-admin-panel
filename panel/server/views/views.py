@@ -2,6 +2,7 @@ from django.shortcuts import render, redirect
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
+from django.views.decorators.csrf import csrf_exempt
 from django.db import models
 from django.utils import timezone
 import json
@@ -470,10 +471,13 @@ def logs_api(request):
     except Exception as e:
         return JsonResponse({'success': False, 'error': str(e)})
 
+@csrf_exempt
 @login_required
 @require_http_methods(["POST"])
 def command_api(request):
     """Ejecutar comando en el servidor vía RCON - Requiere header X-Server-ID"""
+    from ..models import Server, UserServerRole
+    
     try:
         server_id = _get_server_id_from_request(request)
         
@@ -488,8 +492,7 @@ def command_api(request):
         except Server.DoesNotExist:
             return JsonResponse({'success': False, 'error': 'Server not found'}, status=404)
         
-        # Verificar permisos
-        from ..models import UserServerRole
+        # Verificar permisos - cualquier usuario con acceso al servidor puede ejecutar comandos
         user_role = UserServerRole.objects.filter(user=request.user, server=server).first()
         if not user_role:
             return JsonResponse({'success': False, 'error': 'No access to this server'}, status=403)
@@ -500,25 +503,95 @@ def command_api(request):
         if not command:
             return JsonResponse({'success': False, 'error': 'Command required'})
         
-        # Comandos permitidos (seguridad)
-        allowed_commands = ['list', 'whitelist', 'say', 'kick', 'ban', 'pardon', 'op', 'deop']
-        command_base = command.split()[0] if command.split() else ''
+        # Lista completa de comandos de Minecraft permitidos
+        # Comandos básicos
+        allowed_commands = [
+            # Información y listado
+            'list', 'help', 'seed', 'gamerule', 'difficulty', 'time', 'weather',
+            # Jugadores
+            'whitelist', 'ban', 'ban-ip', 'banlist', 'pardon', 'pardon-ip', 
+            'kick', 'op', 'deop', 'team', 'scoreboard',
+            # Chat y mensajes
+            'say', 'tell', 'tellraw', 'me', 'title', 'subtitle', 'actionbar',
+            # Items y objetos
+            'give', 'clear', 'enchant', 'replaceitem',
+            # Teletransporte y ubicación
+            'tp', 'teleport', 'spawnpoint', 'setworldspawn',
+            # Modo de juego
+            'gamemode', 'defaultgamemode',
+            # Mundo y bloques
+            'fill', 'clone', 'setblock', 'testforblock', 'testforblocks',
+            'structure', 'place', 'particle', 'playsound', 'stopsound',
+            # Experiencia y niveles
+            'xp', 'experience',
+            # Efectos
+            'effect', 'effect clear',
+            # Entidades
+            'kill', 'summon', 'entitydata', 'tp', 'teleport',
+            # Avanzados
+            'execute', 'function', 'schedule', 'forceload', 'forceload add', 'forceload remove',
+            'setidletimeout', 'stop', 'save-all', 'save-on', 'save-off',
+            # WorldEdit (si está instalado)
+            '//wand', '//set', '//copy', '//paste', '//undo', '//redo', '//cut', '//rotate',
+            # Plugins comunes (Spigot/Paper)
+            'plugins', 'reload', 'version', 'bukkit', 'spigot', 'paper',
+        ]
         
-        if command_base not in allowed_commands:
-            return JsonResponse({'success': False, 'error': f'Command {command_base} not allowed'})
+        # Extraer el comando base (primera palabra)
+        command_parts = command.split()
+        command_base = command_parts[0].lower() if command_parts else ''
         
-        rcon = _get_rcon_connection(server)
+        # Verificar si el comando está permitido
+        # Permitir comandos que empiecen con alguno de los permitidos
+        is_allowed = False
+        for allowed in allowed_commands:
+            if command_base == allowed.lower() or command.startswith(allowed.lower() + ' '):
+                is_allowed = True
+                break
+        
+        # También permitir comandos que empiecen con / (algunos servidores requieren el slash)
+        if command.startswith('/'):
+            command_without_slash = command[1:].strip()
+            command_parts = command_without_slash.split()
+            command_base = command_parts[0].lower() if command_parts else ''
+            for allowed in allowed_commands:
+                if command_base == allowed.lower() or command_without_slash.startswith(allowed.lower() + ' '):
+                    is_allowed = True
+                    break
+        
+        if not is_allowed:
+            return JsonResponse({
+                'success': False, 
+                'error': f'Command "{command_base}" not allowed. Contact administrator if you need this command.'
+            }, status=403)
+        
+        # Usar la función correcta de views_api que maneja mejor RCON
+        from .views_api import _get_rcon_connection as get_rcon_api
+        rcon = get_rcon_api(server)
         if rcon is None:
-            return JsonResponse({'success': False, 'error': f'Cannot connect to RCON. Server: {server.name}, Host: {server.host}, Port: {server.rcon_port}'})
+            return JsonResponse({
+                'success': False, 
+                'error': f'Cannot connect to RCON. Server: {server.name}, Host: {server.host}, Port: {server.rcon_port}'
+            }, status=500)
         
         try:
-            response = rcon.command(command)
-            return JsonResponse({'success': True, 'response': response})
+            # Remover el slash inicial si existe (algunos servidores no lo requieren)
+            command_to_execute = command.lstrip('/')
+            response = rcon.command(command_to_execute)
+            return JsonResponse({
+                'success': True, 
+                'data': {
+                    'output': response,
+                    'command': command
+                }
+            })
         finally:
             try:
                 rcon.disconnect()
             except:
                 pass
     except Exception as e:
-        return JsonResponse({'success': False, 'error': str(e)})
+        import traceback
+        traceback.print_exc()
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
 

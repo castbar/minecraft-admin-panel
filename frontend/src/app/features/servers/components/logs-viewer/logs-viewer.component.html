@@ -1,0 +1,53 @@
+<div class="logs-viewer">
+  <div class="logs-header">
+    <h3>Logs del Servidor</h3>
+    <div class="logs-actions">
+      <ion-button 
+        size="small" 
+        fill="clear"
+        (click)="toggleAutoRefresh()">
+        <ion-icon [name]="autoRefresh ? 'pause-outline' : 'play-outline'"></ion-icon>
+        {{ autoRefresh ? 'Pausar' : 'Reanudar' }}
+      </ion-button>
+      <ion-button 
+        size="small" 
+        fill="clear"
+        (click)="loadLogs()">
+        <ion-icon name="refresh-outline"></ion-icon>
+        Actualizar
+      </ion-button>
+      <ion-button 
+        size="small" 
+        fill="clear"
+        color="danger"
+        (click)="clearLogs()">
+        <ion-icon name="trash-outline"></ion-icon>
+        Limpiar
+      </ion-button>
+    </div>
+  </div>
+
+  <div class="logs-content" *ngIf="!isLoading; else loading">
+    <div class="logs-container">
+      <div 
+        *ngFor="let log of logs" 
+        class="log-line"
+        [class.log-error]="log.includes('ERROR') || log.includes('FATAL')"
+        [class.log-warn]="log.includes('WARN') || log.includes('WARNING')"
+        [class.log-info]="log.includes('INFO')">
+        {{ log }}
+      </div>
+      <div *ngIf="logs.length === 0" class="no-logs">
+        No hay logs disponibles
+      </div>
+    </div>
+  </div>
+
+  <ng-template #loading>
+    <div class="logs-loading">
+      <ion-spinner></ion-spinner>
+      <p>Cargando logs...</p>
+    </div>
+  </ng-template>
+</div>
+

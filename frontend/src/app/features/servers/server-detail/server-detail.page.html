@@ -1,0 +1,166 @@
+<ion-header>
+  <ion-toolbar>
+    <ion-title>{{ server?.name || 'Detalles del Servidor' }}</ion-title>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content>
+  <div *ngIf="loading" class="loading-container">
+    <ion-spinner></ion-spinner>
+  </div>
+
+  <div *ngIf="!loading && server">
+    <ion-segment [(ngModel)]="activeTab" (ionChange)="onTabChange($event)">
+      <ion-segment-button value="overview">
+        <ion-label>Overview</ion-label>
+      </ion-segment-button>
+      <ion-segment-button value="control">
+        <ion-label>Control</ion-label>
+      </ion-segment-button>
+      <ion-segment-button value="config">
+        <ion-label>Configuración</ion-label>
+      </ion-segment-button>
+      <ion-segment-button value="logs">
+        <ion-label>Logs</ion-label>
+      </ion-segment-button>
+    </ion-segment>
+
+    <div *ngIf="activeTab === 'overview'">
+      <ion-card>
+        <ion-card-header>
+          <ion-card-title>Información del Servidor</ion-card-title>
+        </ion-card-header>
+        <ion-card-content>
+          <p><strong>Host:</strong> {{ server.host }}</p>
+          <p><strong>Puerto:</strong> {{ server.port }}</p>
+          <p><strong>Tipo:</strong> {{ server.server_type }}</p>
+          <p><strong>Versión:</strong> {{ server.version }}</p>
+          <p><strong>Estado:</strong> 
+            <ion-badge [color]="serverStatus?.is_running ? 'success' : 'danger'">
+              {{ serverStatus?.is_running ? 'Running' : 'Stopped' }}
+            </ion-badge>
+          </p>
+        </ion-card-content>
+      </ion-card>
+    </div>
+
+    <div *ngIf="activeTab === 'control'">
+      <ion-card>
+        <ion-card-header>
+          <ion-card-title>Control del Servidor</ion-card-title>
+        </ion-card-header>
+        <ion-card-content>
+          <div *ngIf="server" style="margin-bottom: 16px;">
+            <ion-button (click)="controlServer('start')" color="success" [disabled]="serverStatus?.is_running">
+              <ion-icon name="play-outline" slot="start"></ion-icon>
+              Iniciar
+            </ion-button>
+            <ion-button (click)="controlServer('stop')" color="danger" [disabled]="!serverStatus?.is_running">
+              <ion-icon name="stop-outline" slot="start"></ion-icon>
+              Detener
+            </ion-button>
+            <ion-button (click)="controlServer('restart')" color="warning" [disabled]="!serverStatus?.is_running">
+              <ion-icon name="refresh-outline" slot="start"></ion-icon>
+              Reiniciar
+            </ion-button>
+          </div>
+          <div *ngIf="server" style="height: 500px;">
+            <app-command-console [serverId]="server.id"></app-command-console>
+          </div>
+        </ion-card-content>
+      </ion-card>
+    </div>
+
+    <div *ngIf="activeTab === 'config'">
+      <ion-card *ngIf="server">
+        <ion-card-header>
+          <ion-card-title>Configuración del Servidor</ion-card-title>
+        </ion-card-header>
+        <ion-card-content>
+          <ion-list>
+            <ion-item>
+              <ion-label>
+                <h3>Nombre</h3>
+                <p>{{ server.name }}</p>
+              </ion-label>
+            </ion-item>
+            <ion-item>
+              <ion-label>
+                <h3>Host</h3>
+                <p>{{ server.host }}</p>
+              </ion-label>
+            </ion-item>
+            <ion-item>
+              <ion-label>
+                <h3>Puerto</h3>
+                <p>{{ server.port }}</p>
+              </ion-label>
+            </ion-item>
+            <ion-item>
+              <ion-label>
+                <h3>Tipo de Servidor</h3>
+                <p>{{ server.server_type }}</p>
+              </ion-label>
+            </ion-item>
+            <ion-item>
+              <ion-label>
+                <h3>Versión</h3>
+                <p>{{ server.version }}</p>
+              </ion-label>
+            </ion-item>
+            <ion-item>
+              <ion-label>
+                <h3>Max Jugadores</h3>
+                <p>{{ server.max_players }}</p>
+              </ion-label>
+            </ion-item>
+            <ion-item>
+              <ion-label>
+                <h3>Dificultad</h3>
+                <p>{{ server.difficulty }}</p>
+              </ion-label>
+            </ion-item>
+            <ion-item>
+              <ion-label>
+                <h3>PvP</h3>
+                <ion-badge [color]="server.pvp_enabled ? 'success' : 'medium'">
+                  {{ server.pvp_enabled ? 'Habilitado' : 'Deshabilitado' }}
+                </ion-badge>
+              </ion-label>
+            </ion-item>
+            <ion-item>
+              <ion-label>
+                <h3>Whitelist</h3>
+                <ion-badge [color]="server.whitelist_enabled ? 'success' : 'medium'">
+                  {{ server.whitelist_enabled ? 'Habilitada' : 'Deshabilitada' }}
+                </ion-badge>
+              </ion-label>
+            </ion-item>
+          </ion-list>
+          <ion-button 
+            expand="block" 
+            routerLink="/settings"
+            class="ion-margin-top">
+            <ion-icon name="settings-outline" slot="start"></ion-icon>
+            Editar Configuración Completa
+          </ion-button>
+          <ion-button 
+            expand="block" 
+            color="primary"
+            class="ion-margin-top"
+            (click)="editServerSettings()">
+            <ion-icon name="create-outline" slot="start"></ion-icon>
+            Editar Servidor
+          </ion-button>
+        </ion-card-content>
+      </ion-card>
+    </div>
+
+    <div *ngIf="activeTab === 'logs'">
+      <div *ngIf="server" style="height: 600px;">
+        <app-logs-viewer [serverId]="server.id" [autoRefresh]="true"></app-logs-viewer>
+      </div>
+    </div>
+  </div>
+</ion-content>
+

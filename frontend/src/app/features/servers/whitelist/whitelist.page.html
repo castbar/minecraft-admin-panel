@@ -1,0 +1,79 @@
+<ion-header>
+  <ion-toolbar>
+    <ion-title>Whitelist</ion-title>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content>
+  <div *ngIf="loading" class="loading-container">
+    <ion-spinner></ion-spinner>
+    <p>Cargando whitelist...</p>
+  </div>
+
+  <div *ngIf="!loading">
+    <!-- Agregar jugador -->
+    <ion-card>
+      <ion-card-header>
+        <ion-card-title>Agregar Jugador</ion-card-title>
+      </ion-card-header>
+      <ion-card-content>
+        <div class="add-player-form">
+          <ion-input
+            [(ngModel)]="newPlayerName"
+            placeholder="Nombre del jugador"
+            [disabled]="addingPlayer">
+          </ion-input>
+          <ion-button 
+            (click)="addPlayer()"
+            [disabled]="addingPlayer || !newPlayerName.trim()">
+            <ion-icon name="add-outline" slot="start"></ion-icon>
+            Agregar
+          </ion-button>
+        </div>
+      </ion-card-content>
+    </ion-card>
+
+    <!-- Búsqueda -->
+    <ion-card>
+      <ion-card-content>
+        <ion-searchbar
+          [(ngModel)]="searchTerm"
+          (ionInput)="onSearch($event)"
+          placeholder="Buscar jugador...">
+        </ion-searchbar>
+      </ion-card-content>
+    </ion-card>
+
+    <!-- Lista de jugadores -->
+    <ion-card>
+      <ion-card-header>
+        <ion-card-title>
+          Jugadores en Whitelist ({{ filteredWhitelist.length }})
+        </ion-card-title>
+      </ion-card-header>
+      <ion-card-content>
+        <div *ngIf="filteredWhitelist.length === 0" class="empty-state">
+          <ion-icon name="people-outline" size="large"></ion-icon>
+          <p *ngIf="searchTerm">No se encontraron jugadores que coincidan con la búsqueda</p>
+          <p *ngIf="!searchTerm">No hay jugadores en la whitelist</p>
+        </div>
+
+        <ion-list *ngIf="filteredWhitelist.length > 0">
+          <ion-item *ngFor="let player of filteredWhitelist">
+            <ion-label>
+              <h2>{{ player }}</h2>
+            </ion-label>
+            <ion-button 
+              slot="end"
+              fill="clear"
+              color="danger"
+              (click)="removePlayer(player)">
+              <ion-icon name="remove-outline" slot="icon-only"></ion-icon>
+            </ion-button>
+          </ion-item>
+        </ion-list>
+      </ion-card-content>
+    </ion-card>
+  </div>
+</ion-content>
+

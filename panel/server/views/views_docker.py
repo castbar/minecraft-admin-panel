@@ -186,3 +186,51 @@ def container_info(request, server_id=None):
         'data': info
     })
 
+@csrf_exempt
+@login_required
+@require_http_methods(["DELETE"])
+def delete_server(request, server_id=None):
+    """
+    Eliminar un servidor (marca como inactivo y elimina roles)
+    Solo staff o admin del servidor pueden eliminar
+    """
+    # Obtener server_id del header (método principal) o de la URL (compatibilidad)
+    resolved_server_id = _get_server_id_from_request(request) or server_id
+    if not resolved_server_id:
+        return JsonResponse({
+            'success': False, 
+            'error': 'Server ID required. Send header X-Server-ID: <id>'
+        }, status=400)
+    
+    server = get_object_or_404(Server, id=resolved_server_id)
+    
+    # Solo staff o admin del servidor pueden eliminar
+    if not request.user.is_staff:
+        user_role = UserServerRole.objects.filter(user=request.user, server=server).first()
+        if not user_role or user_role.role != 'admin':
+            return JsonResponse({
+                'success': False,
+                'error': 'Permission denied: Only staff or server admin can delete servers'
+            }, status=403)
+    
+    try:
+        # Marcar como inactivo en lugar de eliminar físicamente (soft delete)
+        server.is_active = False
+        server.save()
+        
+        # Eliminar todos los roles asociados
+        UserServerRole.objects.filter(server=server).delete()
+        
+        send_notification(server, 'server_deleted', f"Servidor '{server.name}' eliminado")
+        
+        return JsonResponse({
+            'success': True,
+            'message': f'Servidor {server.name} eliminado correctamente'
+        })
+        
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': f'Error: {str(e)}'
+        }, status=500)
+

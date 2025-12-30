@@ -1,0 +1,175 @@
+<ion-header>
+  <ion-toolbar>
+    <ion-title>Jugadores</ion-title>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content>
+  <div *ngIf="loading" class="loading-container">
+    <ion-spinner></ion-spinner>
+    <p>Cargando jugadores...</p>
+  </div>
+
+  <div *ngIf="!loading">
+    <!-- Card de Jugadores Online -->
+    <ion-card>
+      <ion-card-header>
+        <ion-card-title>
+          <ion-icon name="people-outline"></ion-icon>
+          Jugadores Conectados en Tiempo Real
+        </ion-card-title>
+      </ion-card-header>
+      <ion-card-content>
+        <div class="stat-item">
+          <div class="stat-label">Jugadores Online</div>
+          <div class="stat-value-large">
+            {{ playerCount }} / {{ maxPlayers }}
+          </div>
+        </div>
+        <div *ngIf="onlinePlayers.length > 0" class="players-list">
+          <ion-list>
+            <ion-item *ngFor="let player of onlinePlayers">
+              <ion-label>
+                <h3>{{ player }}</h3>
+              </ion-label>
+              <ion-badge color="success" slot="end">Online</ion-badge>
+            </ion-item>
+          </ion-list>
+        </div>
+        <div *ngIf="onlinePlayers.length === 0" class="empty-players">
+          <p>No hay jugadores conectados</p>
+        </div>
+      </ion-card-content>
+    </ion-card>
+
+    <ion-searchbar
+      [(ngModel)]="searchTerm"
+      (ionInput)="onSearch($event)"
+      placeholder="Buscar jugadores...">
+    </ion-searchbar>
+
+    <div *ngIf="filteredUsers.length === 0" class="empty-state">
+      <ion-icon name="person-outline" size="large"></ion-icon>
+      <h2>No hay jugadores</h2>
+      <p *ngIf="searchTerm">No se encontraron jugadores que coincidan con la búsqueda</p>
+      <p *ngIf="!searchTerm">Crea tu primer jugador usando el botón +</p>
+    </div>
+
+    <ion-list *ngIf="filteredUsers.length > 0" style="max-height: calc(100vh - 400px); overflow-y: auto;">
+      <ion-item *ngFor="let user of filteredUsers" lines="full">
+        <ion-icon name="person-outline" slot="start" color="primary"></ion-icon>
+        <ion-label>
+          <h2>{{ user.username }}</h2>
+          <p *ngIf="user.email">
+            <ion-icon name="mail-outline" size="small"></ion-icon>
+            {{ user.email }}
+          </p>
+          <div class="user-badges">
+            <ion-badge *ngIf="isPlayerOnline(user.username)" color="success">
+              <ion-icon name="radio-button-on-outline" size="small"></ion-icon>
+              Online
+            </ion-badge>
+            <ion-badge *ngIf="user.is_operator" color="warning">
+              <ion-icon name="shield-checkmark-outline" size="small"></ion-icon>
+              Operador
+            </ion-badge>
+            <ion-badge [color]="user.is_active ? 'success' : 'medium'">
+              {{ user.is_active ? 'Activo' : 'Inactivo' }}
+            </ion-badge>
+          </div>
+        </ion-label>
+        <div slot="end" class="item-actions">
+          <ion-button 
+            fill="clear" 
+            size="small"
+            [color]="isInWhitelist(user.username) ? 'success' : 'medium'"
+            (click)="toggleWhitelist(user)"
+            [title]="isInWhitelist(user.username) ? 'Quitar de whitelist' : 'Agregar a whitelist'">
+            <ion-icon 
+              [name]="isInWhitelist(user.username) ? 'checkmark-circle-outline' : 'remove-circle-outline'" 
+              slot="icon-only">
+            </ion-icon>
+          </ion-button>
+          <ion-button fill="clear" size="small" (click)="openEditModal(user)">
+            <ion-icon name="create-outline" slot="icon-only"></ion-icon>
+          </ion-button>
+          <ion-button fill="clear" size="small" color="danger" (click)="deleteUser(user)">
+            <ion-icon name="trash-outline" slot="icon-only"></ion-icon>
+          </ion-button>
+        </div>
+      </ion-item>
+    </ion-list>
+  </div>
+
+  <!-- Modal Crear Usuario -->
+  <ion-modal [isOpen]="isCreateModalOpen" (willDismiss)="isCreateModalOpen = false">
+    <ng-template>
+      <ion-header>
+        <ion-toolbar>
+          <ion-title>Crear Usuario</ion-title>
+          <ion-buttons slot="end">
+            <ion-button (click)="isCreateModalOpen = false">Cerrar</ion-button>
+          </ion-buttons>
+        </ion-toolbar>
+      </ion-header>
+      <ion-content class="ion-padding">
+        <ion-item>
+          <ion-label position="stacked">Nombre de Usuario *</ion-label>
+          <ion-input [(ngModel)]="newUser.username" placeholder="Ingresa el nombre de usuario"></ion-input>
+        </ion-item>
+        <ion-item>
+          <ion-label position="stacked">Email</ion-label>
+          <ion-input type="email" [(ngModel)]="newUser.email" placeholder="email@ejemplo.com"></ion-input>
+        </ion-item>
+        <ion-item>
+          <ion-label>Es Operador</ion-label>
+          <ion-toggle [(ngModel)]="newUser.is_operator"></ion-toggle>
+        </ion-item>
+        <ion-button expand="block" (click)="createUser()" class="ion-margin-top">
+          Crear Usuario
+        </ion-button>
+      </ion-content>
+    </ng-template>
+  </ion-modal>
+
+  <!-- Modal Editar Usuario -->
+  <ion-modal [isOpen]="isEditModalOpen" (willDismiss)="isEditModalOpen = false">
+    <ng-template>
+      <ion-header>
+        <ion-toolbar>
+          <ion-title>Editar Usuario</ion-title>
+          <ion-buttons slot="end">
+            <ion-button (click)="isEditModalOpen = false">Cerrar</ion-button>
+          </ion-buttons>
+        </ion-toolbar>
+      </ion-header>
+      <ion-content class="ion-padding">
+        <ion-item>
+          <ion-label position="stacked">Nombre de Usuario</ion-label>
+          <ion-input [(ngModel)]="editUser.username" placeholder="Nombre de usuario"></ion-input>
+        </ion-item>
+        <ion-item>
+          <ion-label position="stacked">Email</ion-label>
+          <ion-input type="email" [(ngModel)]="editUser.email" placeholder="email@ejemplo.com"></ion-input>
+        </ion-item>
+        <ion-item>
+          <ion-label>Es Operador</ion-label>
+          <ion-toggle [(ngModel)]="editUser.is_operator"></ion-toggle>
+        </ion-item>
+        <ion-item>
+          <ion-label>Activo</ion-label>
+          <ion-toggle [(ngModel)]="editUser.is_active"></ion-toggle>
+        </ion-item>
+        <ion-button expand="block" (click)="updateUser()" class="ion-margin-top">
+          Guardar Cambios
+        </ion-button>
+      </ion-content>
+    </ng-template>
+  </ion-modal>
+
+  <ion-fab vertical="bottom" horizontal="end" slot="fixed">
+    <ion-fab-button (click)="isCreateModalOpen = true">
+      <ion-icon name="add-outline"></ion-icon>
+    </ion-fab-button>
+  </ion-fab>
+</ion-content>

@@ -33,7 +33,7 @@
         </ion-item>
         <ion-item>
           <ion-label>Tipo de Servidor</ion-label>
-          <ion-select [(ngModel)]="serverData.server_type">
+          <ion-select [(ngModel)]="serverData.server_type" (ionChange)="onServerTypeChange()">
             <ion-select-option value="vanilla">Vanilla</ion-select-option>
             <ion-select-option value="fabric">Fabric</ion-select-option>
             <ion-select-option value="forge">Forge</ion-select-option>
@@ -48,7 +48,19 @@
         </ion-item>
         <ion-item>
           <ion-label position="stacked">Max Jugadores</ion-label>
-          <ion-input type="number" [(ngModel)]="serverData.max_players"></ion-input>
+          <ion-input 
+            type="number" 
+            [(ngModel)]="serverData.max_players"
+            [min]="1"
+            [max]="100"
+            (ionInput)="calculateMaxPlayers()">
+          </ion-input>
+          <ion-note slot="helper" *ngIf="maxPlayersRecommended > 0">
+            💡 Recomendado según recursos: {{ maxPlayersRecommended }} jugadores
+            <span *ngIf="serverData.max_players && serverData.max_players > maxPlayersRecommended" style="color: var(--ion-color-warning);">
+              ⚠️ Estás configurando más jugadores de los recomendados. Puede causar lag.
+            </span>
+          </ion-note>
         </ion-item>
         <ion-item>
           <ion-label>Dificultad</ion-label>
@@ -67,10 +79,65 @@
           <ion-label>Whitelist Habilitada</ion-label>
           <ion-toggle [(ngModel)]="serverData.whitelist_enabled"></ion-toggle>
         </ion-item>
+        
+        <!-- Configuración de Memoria (Avanzado) -->
+        <ion-item>
+          <ion-label>
+            <h3>Configuración de Memoria</h3>
+            <p>Opcional: El sistema calculará automáticamente si no especificas</p>
+          </ion-label>
+        </ion-item>
+        <ion-item>
+          <ion-label position="stacked">
+            Memoria Total (MB)
+            <ion-icon 
+              name="help-circle-outline" 
+              (click)="showMemoryHelp('total')"
+              style="margin-left: 5px; cursor: pointer; font-size: 18px;">
+            </ion-icon>
+          </ion-label>
+          <ion-input 
+            type="number" 
+            [(ngModel)]="serverData.memory_limit_mb"
+            [min]="1024"
+            [max]="16384"
+            placeholder="Auto (recomendado)"
+            (ionInput)="calculateMaxPlayers()">
+          </ion-input>
+          <ion-note slot="helper" *ngIf="recommendedMemory">
+            💡 Recomendado para {{ serverData.server_type }}: {{ recommendedMemory.memory_limit_mb }}MB
+            <br>
+            👥 Jugadores máximos recomendados: {{ maxPlayersRecommended }} (basado en {{ (serverData.memory_limit_mb || recommendedMemory.memory_limit_mb) }}MB)
+          </ion-note>
+        </ion-item>
+        <ion-item *ngIf="serverData.memory_limit_mb">
+          <ion-label position="stacked">
+            Heap Máximo Java (MB)
+            <ion-icon 
+              name="help-circle-outline" 
+              (click)="showMemoryHelp('heap')"
+              style="margin-left: 5px; cursor: pointer; font-size: 18px;">
+            </ion-icon>
+          </ion-label>
+          <ion-input 
+            type="number" 
+            [(ngModel)]="serverData.java_heap_max_mb"
+            [min]="512"
+            [max]="serverData.memory_limit_mb ? serverData.memory_limit_mb - 200 : 15360"
+            placeholder="Auto"
+            (ionInput)="calculateMaxPlayers()">
+          </ion-input>
+          <ion-note slot="helper">
+            Máximo: {{ (serverData.memory_limit_mb || 2048) - 200 }}MB (deja 200MB para el sistema)
+          </ion-note>
+        </ion-item>
       </ion-list>
-      <ion-button expand="block" (click)="createServer()" class="ion-margin-top">
+      <ion-button expand="block" (click)="createServer()" class="ion-margin-top" [disabled]="!isFormValid()">
         Crear Servidor
       </ion-button>
+      <ion-note *ngIf="!isFormValid()" color="warning" style="display: block; text-align: center; margin-top: 10px;">
+        ⚠️ Completa los campos requeridos
+      </ion-note>
     </ion-card-content>
   </ion-card>
 </ion-content>

@@ -296,3 +296,91 @@ def get_container_info(container_name: str) -> Dict[str, any]:
             'error': 'Error al parsear información del contenedor'
         }
 
+def update_container_memory(container_name: str, memory_limit_mb: int) -> Dict[str, any]:
+    """
+    Actualizar límite de memoria de un contenedor existente
+    
+    Nota: Docker requiere reiniciar el contenedor para aplicar cambios de memoria
+    
+    Args:
+        container_name: Nombre del contenedor
+        memory_limit_mb: Nuevo límite de memoria en MB
+    
+    Returns:
+        Dict con 'success', 'message', 'error'
+    """
+    # Verificar que el contenedor existe
+    status = get_container_status(container_name)
+    if status == 'not_found':
+        return {
+            'success': False,
+            'error': f'Contenedor {container_name} no existe'
+        }
+    
+    # Actualizar límite de memoria usando docker update
+    result = docker_command([
+        'update',
+        '--memory', f'{memory_limit_mb}m',
+        '--memory-swap', f'{memory_limit_mb}m',
+        container_name
+    ])
+    
+    if result['success']:
+        return {
+            'success': True,
+            'message': f'Límite de memoria actualizado a {memory_limit_mb}MB. Reinicia el contenedor para aplicar cambios.',
+            'requires_restart': True
+        }
+    else:
+        return {
+            'success': False,
+            'error': result['error'] or 'Error al actualizar límite de memoria'
+        }
+
+def get_recommended_memory(server_type: str, players_online: int = 0) -> Dict[str, int]:
+    """
+    Calcular memoria recomendada según tipo de servidor y jugadores
+    
+    Args:
+        server_type: Tipo de servidor (vanilla, paper, fabric, forge)
+        players_online: Número de jugadores online (opcional)
+    
+    Returns:
+        Dict con 'memory_limit_mb', 'java_heap_max_mb', 'java_heap_min_mb'
+    """
+    # Memoria base según tipo
+    base_memory = {
+        'vanilla': 1024,
+        'paper': 1024,
+        'spigot': 1024,
+        'bukkit': 1024,
+        'fabric': 2048,
+        'forge': 3072,
+    }.get(server_type, 2048)
+    
+    # ~200MB por jugador
+    player_memory = players_online * 200
+    
+    # Memoria total recomendada
+    memory_limit_mb = base_memory + player_memory
+    
+    # Asegurar mínimo según tipo
+    min_memory = {
+        'vanilla': 1024,
+        'paper': 1024,
+        'fabric': 2048,
+        'forge': 3072,
+    }.get(server_type, 2048)
+    
+    memory_limit_mb = max(memory_limit_mb, min_memory)
+    
+    # Heap Java (dejar ~200MB para sistema)
+    java_heap_max_mb = memory_limit_mb - 200
+    java_heap_min_mb = min(512, java_heap_max_mb // 3)  # Mínimo 512MB o 1/3 del máximo
+    
+    return {
+        'memory_limit_mb': memory_limit_mb,
+        'java_heap_max_mb': java_heap_max_mb,
+        'java_heap_min_mb': java_heap_min_mb
+    }
+

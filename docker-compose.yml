@@ -16,9 +16,9 @@ networks:
   minecraft-admin:
     external: true
     name: minecraft-admin
-  cobblemon:
+  minecraft-servers:
     external: true
-    name: cobblemon
+    name: minecraft-servers
 
 services:
   # Frontend Ionic (Nginx)
@@ -49,7 +49,7 @@ services:
     container_name: minecraft-admin-panel
     networks:
       - minecraft-admin
-      - cobblemon  # Conectar también a la red de servidores Minecraft
+      - minecraft-servers  # Conectar también a la red de servidores Minecraft
     # No exponer puerto 8000 públicamente, solo para nginx
     expose:
       - "8000"

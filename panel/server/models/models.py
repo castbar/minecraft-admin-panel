@@ -136,6 +136,30 @@ class Server(models.Model):
         help_text="Lista de plugins adicionales a instalar (nombres de archivos)"
     )
     
+    # Configuración de memoria y Java
+    memory_limit_mb = models.IntegerField(
+        default=2048,
+        help_text="Límite de memoria RAM en MB (ej: 2048 = 2GB)"
+    )
+    java_heap_min_mb = models.IntegerField(
+        default=512,
+        help_text="Heap mínimo de Java en MB (Xms)"
+    )
+    java_heap_max_mb = models.IntegerField(
+        default=1536,
+        help_text="Heap máximo de Java en MB (Xmx) - debe ser < memory_limit_mb"
+    )
+    java_gc_type = models.CharField(
+        max_length=20,
+        choices=[
+            ('g1', 'G1GC (recomendado para >2GB)'),
+            ('parallel', 'ParallelGC (para <2GB)'),
+            ('zgc', 'ZGC (experimental, Java 17+)'),
+        ],
+        default='g1',
+        help_text="Tipo de Garbage Collector"
+    )
+    
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

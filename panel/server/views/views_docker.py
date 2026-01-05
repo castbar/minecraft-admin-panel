@@ -79,6 +79,24 @@ def create_server(request):
                 'error': 'Invalid RCON port: must be between 1 and 65535'
             }, status=400)
         
+        # Calcular memoria recomendada si no se proporciona
+        from ..utils.docker_control import get_recommended_memory
+        
+        server_type = data.get('server_type', 'vanilla')
+        if 'memory_limit_mb' not in data:
+            recommended = get_recommended_memory(server_type)
+            data['memory_limit_mb'] = recommended['memory_limit_mb']
+            data['java_heap_max_mb'] = recommended['java_heap_max_mb']
+            data['java_heap_min_mb'] = recommended['java_heap_min_mb']
+        
+        # Validar que heap_max < memory_limit
+        memory_limit_mb = data.get('memory_limit_mb', 2048)
+        java_heap_max_mb = data.get('java_heap_max_mb', min(1536, memory_limit_mb - 200))
+        java_heap_min_mb = data.get('java_heap_min_mb', 512)
+        
+        if java_heap_max_mb >= memory_limit_mb:
+            java_heap_max_mb = memory_limit_mb - 200
+        
         # Crear registro en la base de datos (sin crear contenedor Docker)
         server = Server.objects.create(
             name=data['name'],
@@ -94,8 +112,13 @@ def create_server(request):
             is_public=data.get('is_public', False),
             is_hidden=data.get('is_hidden', False),
             # Tipo de servidor y versión
-            server_type=data.get('server_type', 'vanilla'),
+            server_type=server_type,
             minecraft_version=data.get('minecraft_version', 'latest'),
+            # Configuración de memoria
+            memory_limit_mb=memory_limit_mb,
+            java_heap_max_mb=java_heap_max_mb,
+            java_heap_min_mb=java_heap_min_mb,
+            java_gc_type=data.get('java_gc_type', 'g1'),
             # Mods y plugins base
             install_fabric_api=data.get('install_fabric_api', False),
             install_forge=data.get('install_forge', False),
@@ -141,6 +164,10 @@ def create_server(request):
                 'online_mode': server.online_mode,
                 'server_type': server.server_type,
                 'minecraft_version': server.minecraft_version,
+                'memory_limit_mb': server.memory_limit_mb,
+                'java_heap_max_mb': server.java_heap_max_mb,
+                'java_heap_min_mb': server.java_heap_min_mb,
+                'java_gc_type': server.java_gc_type,
                 'role': 'admin',  # El usuario que crea el servidor siempre tiene rol admin
             }
         })

@@ -8,11 +8,11 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Copiar requirements de Django
-COPY panel/requirements.txt .
+COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copiar código Django
-COPY panel/ .
+COPY . .
 
 # NOTA: El frontend se sirve desde Nginx (servicio separado)
 # Django solo maneja APIs y admin, no necesita el frontend compilado
@@ -20,9 +20,12 @@ COPY panel/ .
 # Exponer puerto
 EXPOSE 8000
 
-# Copiar y hacer ejecutable entrypoint
-COPY panel/entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+# Copiar entrypoint y asegurar formato Unix
+COPY entrypoint.sh /entrypoint.sh
+RUN apt-get update && apt-get install -y dos2unix && \
+    dos2unix /entrypoint.sh && \
+    chmod +x /entrypoint.sh && \
+    rm -rf /var/lib/apt/lists/*
 
 # Comando para iniciar Django
 ENTRYPOINT ["/entrypoint.sh"]

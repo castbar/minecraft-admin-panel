@@ -21,6 +21,28 @@ except ImportError:
         except:
             return None
 
+def _parse_server_properties(content):
+    """Parsear server.properties y devolver diccionario con valores"""
+    props = {}
+    for line in content.split('\n'):
+        line = line.strip()
+        if line and not line.startswith('#') and '=' in line:
+            key, value = line.split('=', 1)
+            key = key.strip()
+            value = value.strip()
+            
+            # Convertir valores booleanos
+            if value.lower() in ['true', 'false']:
+                props[key] = value.lower() == 'true'
+            # Convertir valores numéricos (incluyendo negativos)
+            elif value.lstrip('-').isdigit():
+                props[key] = int(value)
+            else:
+                # Mantener como string (puede tener escapes)
+                props[key] = value.replace('\\"', '"').replace('\\n', '\n')
+    
+    return props
+
 @login_required
 @require_server_permission('manage_settings')
 @require_http_methods(["GET"])
@@ -28,22 +50,72 @@ def server_settings(request, server_id):
     """Obtener configuración del servidor"""
     server = request.server
     
-    # Leer max-players y motd desde server.properties
-    max_players = 20
-    motd = "A Minecraft Server"
+    # Valores por defecto
+    properties = {
+        'max-players': 20,
+        'motd': 'A Minecraft Server',
+        'difficulty': 'normal',
+        'pvp': True,
+        'white-list': False,
+        'online-mode': False,
+        'view-distance': 10,
+        'simulation-distance': 10,
+        'spawn-protection': 16,
+        'max-world-size': 29999984,
+        'server-port': 25565,
+        'enable-rcon': True,
+        'rcon-port': 25575,
+        'gamemode': 'survival',
+        'hardcore': False,
+        'spawn-monsters': True,
+        'spawn-animals': True,
+        'spawn-npcs': True,
+        'allow-flight': False,
+        'enable-command-block': False,
+        'op-permission-level': 4,
+        'function-permission-level': 2,
+        'max-tick-time': 60000,
+        'network-compression-threshold': 256,
+        'enforce-whitelist': False,
+        'enforce-secure-profile': True,
+        'log-ips': True,
+        'player-idle-timeout': 0,
+        'rate-limit': 0,
+        'resource-pack': '',
+        'resource-pack-prompt': '',
+        'force-gamemode': False,
+        'generate-structures': True,
+        'allow-nether': True,
+    }
+    
     server_properties_path = os.path.join(server.minecraft_data_path, 'server.properties')
     
-    if os.path.exists(server_properties_path):
-        with open(server_properties_path, 'r') as f:
-            for line in f:
-                line = line.strip()
-                if line.startswith('max-players='):
-                    try:
-                        max_players = int(line.split('=')[1])
-                    except:
-                        pass
-                elif line.startswith('motd='):
-                    motd = line.split('=', 1)[1].replace('\\"', '"').replace('\\n', '\n')
+    # Si el servidor tiene container_name, leer desde el contenedor Docker
+    if server.container_name:
+        try:
+            import docker
+            client = docker.from_env()
+            container = client.containers.get(server.container_name)
+            
+            result = container.exec_run(
+                f'cat {server_properties_path}',
+                user='minecraft'
+            )
+            
+            if result.exit_code == 0:
+                content = result.output.decode('utf-8')
+                properties.update(_parse_server_properties(content))
+        except Exception as e:
+            print(f"⚠️ Error leyendo server.properties del contenedor: {e}")
+    
+    # Fallback: leer desde sistema de archivos local
+    elif os.path.exists(server_properties_path):
+        try:
+            with open(server_properties_path, 'r') as f:
+                content = f.read()
+                properties.update(_parse_server_properties(content))
+        except Exception as e:
+            print(f"⚠️ Error leyendo server.properties: {e}")
     
     return JsonResponse({
         'success': True,
@@ -55,11 +127,44 @@ def server_settings(request, server_id):
             'auth_mode': server.auth_mode,
             'auth_mode_display': server.get_auth_mode_display_short(),
             'enable_whitelist': server.enable_whitelist,
-            'api_key': server.api_key or None,  # No exponer si no existe
+            'api_key': server.api_key or None,
             'online_mode': server.online_mode,
             'is_active': server.is_active,
-            'max_players': max_players,
-            'motd': motd,
+            # Propiedades de server.properties
+            'max_players': properties.get('max-players', 20),
+            'motd': properties.get('motd', 'A Minecraft Server'),
+            'difficulty': properties.get('difficulty', 'normal'),
+            'pvp': properties.get('pvp', True),
+            'view_distance': properties.get('view-distance', 10),
+            'simulation_distance': properties.get('simulation-distance', 10),
+            'spawn_protection': properties.get('spawn-protection', 16),
+            'max_world_size': properties.get('max-world-size', 29999984),
+            'server_port': properties.get('server-port', 25565),
+            # Tipo de servidor y versión
+            'server_type': server.server_type,
+            'minecraft_version': server.minecraft_version,
+            # Propiedades adicionales
+            'gamemode': properties.get('gamemode', 'survival'),
+            'hardcore': properties.get('hardcore', False),
+            'spawn_monsters': properties.get('spawn-monsters', True),
+            'spawn_animals': properties.get('spawn-animals', True),
+            'spawn_npcs': properties.get('spawn-npcs', True),
+            'allow_flight': properties.get('allow-flight', False),
+            'enable_command_block': properties.get('enable-command-block', False),
+            'op_permission_level': properties.get('op-permission-level', 4),
+            'function_permission_level': properties.get('function-permission-level', 2),
+            'max_tick_time': properties.get('max-tick-time', 60000),
+            'network_compression_threshold': properties.get('network-compression-threshold', 256),
+            'enforce_whitelist': properties.get('enforce-whitelist', False),
+            'enforce_secure_profile': properties.get('enforce-secure-profile', True),
+            'log_ips': properties.get('log-ips', True),
+            'player_idle_timeout': properties.get('player-idle-timeout', 0),
+            'rate_limit': properties.get('rate-limit', 0),
+            'resource_pack': properties.get('resource-pack', ''),
+            'resource_pack_prompt': properties.get('resource-pack-prompt', ''),
+            'force_gamemode': properties.get('force-gamemode', False),
+            'generate_structures': properties.get('generate-structures', True),
+            'allow_nether': properties.get('allow-nether', True),
         }
     })
 
@@ -72,8 +177,12 @@ def server_settings_update(request, server_id):
     server = request.server
     data = json.loads(request.body)
     
-    # Campos actualizables
-    updatable_fields = ['is_public', 'auth_mode', 'enable_whitelist', 'online_mode', 'max_players', 'motd']
+    # Campos actualizables en el modelo Server
+    updatable_fields = ['is_public', 'auth_mode', 'enable_whitelist', 'online_mode', 'server_type', 'minecraft_version']
+    
+    # Verificar si se cambió el tipo de servidor o versión (requiere reinicio del contenedor)
+    server_type_changed = 'server_type' in data and data['server_type'] != server.server_type
+    version_changed = 'minecraft_version' in data and data['minecraft_version'] != server.minecraft_version
     
     for field in updatable_fields:
         if field in data:
@@ -85,26 +194,173 @@ def server_settings_update(request, server_id):
     
     server.save()
     
-    # Aplicar cambios al servidor Minecraft
-    _apply_server_settings(server, data)
+    # Preparar datos para server.properties (mapear nombres del frontend a nombres de propiedades)
+    properties_data = {}
+    
+    # Mapear campos del frontend a propiedades de server.properties
+    field_mapping = {
+        'max_players': 'max-players',
+        'motd': 'motd',
+        'difficulty': 'difficulty',
+        'pvp': 'pvp',
+        'enable_whitelist': 'white-list',
+        'online_mode': 'online-mode',
+        'view_distance': 'view-distance',
+        'simulation_distance': 'simulation-distance',
+        'spawn_protection': 'spawn-protection',
+        'max_world_size': 'max-world-size',
+        'server_port': 'server-port',
+        'gamemode': 'gamemode',
+        'hardcore': 'hardcore',
+        'spawn_monsters': 'spawn-monsters',
+        'spawn_animals': 'spawn-animals',
+        'spawn_npcs': 'spawn-npcs',
+        'allow_flight': 'allow-flight',
+        'enable_command_block': 'enable-command-block',
+        'op_permission_level': 'op-permission-level',
+        'function_permission_level': 'function-permission-level',
+        'max_tick_time': 'max-tick-time',
+        'network_compression_threshold': 'network-compression-threshold',
+        'enforce_whitelist': 'enforce-whitelist',
+        'enforce_secure_profile': 'enforce-secure-profile',
+        'log_ips': 'log-ips',
+        'player_idle_timeout': 'player-idle-timeout',
+        'rate_limit': 'rate-limit',
+        'resource_pack': 'resource-pack',
+        'resource_pack_prompt': 'resource-pack-prompt',
+        'force_gamemode': 'force-gamemode',
+        'generate_structures': 'generate-structures',
+        'allow_nether': 'allow-nether',
+    }
+    
+    for frontend_field, prop_field in field_mapping.items():
+        if frontend_field in data:
+            properties_data[prop_field] = data[frontend_field]
+    
+    # Leer valores actuales de server.properties para comparar
+    current_properties = {}
+    server_properties_path = os.path.join(server.minecraft_data_path, 'server.properties')
+    
+    if server.container_name:
+        try:
+            import docker
+            client = docker.from_env()
+            container = client.containers.get(server.container_name)
+            result = container.exec_run(
+                f'cat {server_properties_path}',
+                user='minecraft'
+            )
+            if result.exit_code == 0:
+                content = result.output.decode('utf-8')
+                current_properties = _parse_server_properties(content)
+        except Exception as e:
+            print(f"⚠️ Error leyendo server.properties para comparar: {e}")
+    elif os.path.exists(server_properties_path):
+        try:
+            with open(server_properties_path, 'r') as f:
+                content = f.read()
+                current_properties = _parse_server_properties(content)
+        except Exception as e:
+            print(f"⚠️ Error leyendo server.properties para comparar: {e}")
+    
+    # Comparar valores nuevos con los actuales y solo incluir los que cambiaron
+    changed_properties = {}
+    for prop_name, new_value in properties_data.items():
+        current_value = current_properties.get(prop_name)
+        # Normalizar valores para comparación
+        if isinstance(new_value, bool):
+            new_value_normalized = new_value
+            current_value_normalized = current_value if isinstance(current_value, bool) else str(current_value).lower() == 'true'
+        elif isinstance(new_value, (int, float)):
+            new_value_normalized = new_value
+            try:
+                current_value_normalized = int(current_value) if current_value is not None else None
+            except (ValueError, TypeError):
+                current_value_normalized = current_value
+        else:
+            new_value_normalized = str(new_value).strip()
+            current_value_normalized = str(current_value).strip() if current_value is not None else None
+        
+        # Solo agregar si realmente cambió
+        if new_value_normalized != current_value_normalized:
+            changed_properties[prop_name] = new_value
+    
+    # Aplicar cambios al servidor Minecraft (solo los que cambiaron)
+    _apply_server_settings(server, changed_properties)
+    
+    # Determinar qué cambios requieren reinicio
+    # Algunos cambios se pueden aplicar vía RCON sin reinicio
+    requires_restart = []
+    can_apply_via_rcon = []
+    
+    # Cambios de tipo de servidor o versión requieren recrear el contenedor
+    if server_type_changed:
+        requires_restart.append('server_type')
+    if version_changed:
+        requires_restart.append('minecraft_version')
+    
+    # Propiedades que se pueden aplicar vía RCON (sin reinicio)
+    rcon_properties = ['difficulty', 'pvp', 'white-list', 'gamemode']
+    
+    # Propiedades que requieren reinicio (solo las que cambiaron y no se pueden aplicar vía RCON)
+    restart_properties = [
+        'max-players', 'motd', 'online-mode', 'view-distance', 'simulation-distance',
+        'spawn-protection', 'max-world-size', 'server-port', 'hardcore',
+        'spawn-monsters', 'spawn-animals', 'spawn-npcs', 'allow-flight',
+        'enable-command-block', 'op-permission-level', 'function-permission-level',
+        'max-tick-time', 'network-compression-threshold', 'enforce-whitelist',
+        'enforce-secure-profile', 'log-ips', 'player-idle-timeout', 'rate-limit',
+        'resource-pack', 'resource-pack-prompt', 'force-gamemode', 'generate-structures',
+        'allow-nether'
+    ]
+    
+    # Agregar propiedades que requieren reinicio (excluyendo las que se pueden aplicar vía RCON)
+    for prop in restart_properties:
+        if prop in changed_properties and prop not in rcon_properties:
+            requires_restart.append(prop.replace('-', '_'))
+    
+    # Agregar propiedades que se pueden aplicar vía RCON
+    for prop in rcon_properties:
+        if prop in changed_properties:
+            can_apply_via_rcon.append(prop.replace('-', '_').replace('white_list', 'whitelist'))
+    
+    # Mensaje más corto
+    if requires_restart and can_apply_via_rcon:
+        message = f'Configuración guardada. {len(requires_restart)} cambios requieren reinicio'
+    elif requires_restart:
+        message = f'Configuración guardada. {len(requires_restart)} cambios requieren reinicio'
+    elif can_apply_via_rcon:
+        message = 'Configuración guardada y aplicada'
+    else:
+        message = 'Configuración guardada'
     
     return JsonResponse({
         'success': True,
-        'message': 'Server settings updated',
+        'message': message,
+        'requires_restart': requires_restart,
+        'applied_via_rcon': can_apply_via_rcon,
         'data': {
             'is_public': server.is_public,
             'auth_mode': server.auth_mode,
             'enable_whitelist': server.enable_whitelist,
             'online_mode': server.online_mode,
-            'max_players': getattr(server, 'max_players', None),
-            'motd': getattr(server, 'motd', None),
         }
     })
 
 def _apply_server_settings(server, data=None):
-    """Aplicar configuración al servidor Minecraft vía RCON o archivos"""
+    """
+    Aplicar configuración al servidor Minecraft vía RCON o archivos
+    
+    Estrategia:
+    1. Cambios que se pueden aplicar vía RCON (sin reinicio): whitelist, difficulty
+    2. Cambios que requieren modificar server.properties (requieren reinicio): max_players, motd, online_mode
+    """
     import os
     import re
+    import docker
+    import tarfile
+    import io
+    
     # Importar función RCON desde views_api
     try:
         from .views_api import _get_rcon_connection
@@ -119,57 +375,219 @@ def _apply_server_settings(server, data=None):
             except:
                 return None
     
-    # Modificar server.properties para cambios que requieren reinicio
+    if not data:
+        return
+    
+    requires_restart = []
+    applied_via_rcon = []
+    
+    # Ruta al archivo server.properties dentro del contenedor
     server_properties_path = os.path.join(server.minecraft_data_path, 'server.properties')
     
-    if os.path.exists(server_properties_path):
-        # Leer archivo
-        with open(server_properties_path, 'r') as f:
-            content = f.read()
-        
-        # Aplicar cambios según los datos recibidos
-        if data:
-            # Max players - modificar server.properties
-            if 'max_players' in data:
-                max_players = data['max_players']
-                content = re.sub(r'^max-players=.*$', f'max-players={max_players}', content, flags=re.MULTILINE)
+    # Si el servidor tiene container_name, trabajar con el contenedor Docker
+    if server.container_name:
+        try:
+            client = docker.from_env()
+            container = client.containers.get(server.container_name)
             
-            # MOTD - modificar server.properties
+            # Leer server.properties desde el contenedor
+            result = container.exec_run(
+                f'cat {server_properties_path}',
+                user='minecraft'
+            )
+            
+            if result.exit_code != 0:
+                print(f"⚠️ No se pudo leer server.properties del contenedor {server.container_name}")
+                return
+            
+            content = result.output.decode('utf-8')
+            content_modified = False
+            
+            # Mapeo de propiedades a sus valores y si requieren reinicio
+            # Formato: (propiedad, valor_formateado, requiere_reinicio, puede_rcon, comando_rcon)
+            property_updates = []
+            
+            # Función helper para agregar propiedades
+            def add_property(prop_name, value, can_rcon=False, rcon_cmd=None):
+                if isinstance(value, bool):
+                    value_str = 'true' if value else 'false'
+                else:
+                    value_str = str(value)
+                property_updates.append((prop_name, value_str, True, can_rcon, rcon_cmd))
+            
+            # Propiedades que requieren reinicio
+            if 'max-players' in data:
+                add_property('max-players', data['max-players'])
             if 'motd' in data:
-                motd = data['motd'].replace('\\', '\\\\').replace('"', '\\"')
-                content = re.sub(r'^motd=.*$', f'motd={motd}', content, flags=re.MULTILINE)
+                motd = str(data['motd']).replace('\\', '\\\\').replace('"', '\\"')
+                add_property('motd', motd)
+            if 'online-mode' in data:
+                add_property('online-mode', data['online-mode'])
+            if 'view-distance' in data:
+                add_property('view-distance', data['view-distance'])
+            if 'simulation-distance' in data:
+                add_property('simulation-distance', data['simulation-distance'])
+            if 'spawn-protection' in data:
+                add_property('spawn-protection', data['spawn-protection'])
+            if 'max-world-size' in data:
+                add_property('max-world-size', data['max-world-size'])
+            if 'server-port' in data:
+                add_property('server-port', data['server-port'])
+            if 'gamemode' in data:
+                add_property('gamemode', data['gamemode'], can_rcon=True, rcon_cmd=f'gamemode {data["gamemode"]}')
+            if 'hardcore' in data:
+                add_property('hardcore', data['hardcore'])
+            if 'spawn-monsters' in data:
+                add_property('spawn-monsters', data['spawn-monsters'])
+            if 'spawn-animals' in data:
+                add_property('spawn-animals', data['spawn-animals'])
+            if 'spawn-npcs' in data:
+                add_property('spawn-npcs', data['spawn-npcs'])
+            if 'allow-flight' in data:
+                add_property('allow-flight', data['allow-flight'])
+            if 'enable-command-block' in data:
+                add_property('enable-command-block', data['enable-command-block'])
+            if 'op-permission-level' in data:
+                add_property('op-permission-level', data['op-permission-level'])
+            if 'function-permission-level' in data:
+                add_property('function-permission-level', data['function-permission-level'])
+            if 'max-tick-time' in data:
+                add_property('max-tick-time', data['max-tick-time'])
+            if 'network-compression-threshold' in data:
+                add_property('network-compression-threshold', data['network-compression-threshold'])
+            if 'enforce-whitelist' in data:
+                add_property('enforce-whitelist', data['enforce-whitelist'])
+            if 'enforce-secure-profile' in data:
+                add_property('enforce-secure-profile', data['enforce-secure-profile'])
+            if 'log-ips' in data:
+                add_property('log-ips', data['log-ips'])
+            if 'player-idle-timeout' in data:
+                add_property('player-idle-timeout', data['player-idle-timeout'])
+            if 'rate-limit' in data:
+                add_property('rate-limit', data['rate-limit'])
+            if 'resource-pack' in data:
+                add_property('resource-pack', data['resource-pack'])
+            if 'resource-pack-prompt' in data:
+                add_property('resource-pack-prompt', data['resource-pack-prompt'])
+            if 'force-gamemode' in data:
+                add_property('force-gamemode', data['force-gamemode'])
+            if 'generate-structures' in data:
+                add_property('generate-structures', data['generate-structures'])
+            if 'allow-nether' in data:
+                add_property('allow-nether', data['allow-nether'])
             
-            # Online mode - modificar server.properties
-            if 'online_mode' in data:
-                online_mode = 'true' if data['online_mode'] else 'false'
-                content = re.sub(r'^online-mode=.*$', f'online-mode={online_mode}', content, flags=re.MULTILINE)
+            # Propiedades que se pueden aplicar vía RCON
+            if 'difficulty' in data:
+                difficulty = str(data['difficulty']).lower()
+                add_property('difficulty', difficulty, can_rcon=True, rcon_cmd=f'difficulty {difficulty}')
+            if 'pvp' in data:
+                add_property('pvp', data['pvp'], can_rcon=True, rcon_cmd=f'pvp {"on" if data["pvp"] else "off"}')
+            if 'white-list' in data:
+                add_property('white-list', data['white-list'], can_rcon=True, rcon_cmd=f'whitelist {"on" if data["white-list"] else "off"}')
             
-            # Whitelist - puede activarse/desactivarse vía RCON
-            if 'enable_whitelist' in data:
-                enable_whitelist = data['enable_whitelist']
-                content = re.sub(r'^white-list=.*$', f'white-list={str(enable_whitelist).lower()}', content, flags=re.MULTILINE)
+            # Aplicar cambios al contenido
+            for prop_name, prop_value, needs_restart, can_rcon, rcon_cmd in property_updates:
+                # Actualizar en el archivo
+                pattern = rf'^{re.escape(prop_name)}=.*$'
+                replacement = f'{prop_name}={prop_value}'
+                new_content = re.sub(pattern, replacement, content, flags=re.MULTILINE)
                 
-                # Intentar aplicar vía RCON si el servidor está online
-                rcon = _get_rcon_connection(server)
-                if rcon:
-                    try:
-                        if enable_whitelist:
-                            rcon.command('whitelist on')
-                        else:
-                            rcon.command('whitelist off')
-                    except:
-                        pass
-                    finally:
-                        try:
-                            rcon.disconnect()
-                        except:
-                            pass
+                # Si la propiedad no existe, agregarla al final
+                if new_content == content and prop_name not in content:
+                    new_content = content.rstrip() + f'\n{prop_name}={prop_value}\n'
+                
+                if new_content != content:
+                    content = new_content
+                    content_modified = True
+                    if needs_restart:
+                        requires_restart.append(prop_name.replace('-', '_'))
+                    
+                    # Intentar aplicar vía RCON si es posible
+                    if can_rcon and rcon_cmd:
+                        rcon = _get_rcon_connection(server)
+                        if rcon:
+                            try:
+                                rcon.command(rcon_cmd)
+                                applied_via_rcon.append(prop_name.replace('-', '_'))
+                            except Exception as e:
+                                print(f"⚠️ No se pudo aplicar {prop_name} vía RCON: {e}")
+                            finally:
+                                try:
+                                    rcon.disconnect()
+                                except:
+                                    pass
+            
+            # Escribir archivo modificado de vuelta al contenedor
+            if content_modified:
+                # Crear un archivo temporal en memoria y copiarlo al contenedor
+                tar_stream = io.BytesIO()
+                with tarfile.open(fileobj=tar_stream, mode='w') as tar:
+                    tarinfo = tarfile.TarInfo(name='server.properties')
+                    tarinfo.size = len(content.encode('utf-8'))
+                    tar.addfile(tarinfo, io.BytesIO(content.encode('utf-8')))
+                
+                tar_stream.seek(0)
+                container.put_archive(os.path.dirname(server_properties_path), tar_stream.read())
+                
+                # Asegurar permisos correctos
+                container.exec_run(f'chown minecraft:minecraft {server_properties_path}', user='root')
+                
+                print(f"✅ server.properties actualizado para {server.name}")
+                
+                if requires_restart:
+                    print(f"⚠️ Los siguientes cambios requieren reinicio del servidor: {', '.join(requires_restart)}")
+                
+                if applied_via_rcon:
+                    print(f"✅ Los siguientes cambios se aplicaron vía RCON (sin reinicio): {', '.join(applied_via_rcon)}")
         
-        # Escribir archivo modificado
-        with open(server_properties_path, 'w') as f:
-            f.write(content)
-        
-        print(f"✅ server.properties actualizado para {server.name}")
+        except docker.errors.NotFound:
+            print(f"❌ Contenedor {server.container_name} no encontrado")
+        except Exception as e:
+            print(f"❌ Error aplicando configuración: {e}")
+            import traceback
+            traceback.print_exc()
+    
+    else:
+        # Fallback: intentar acceso directo al archivo (si está en el mismo sistema de archivos)
+        if os.path.exists(server_properties_path):
+            try:
+                with open(server_properties_path, 'r') as f:
+                    content = f.read()
+                
+                content_modified = False
+                
+                if 'max_players' in data:
+                    max_players = data['max_players']
+                    new_content = re.sub(r'^max-players=.*$', f'max-players={max_players}', content, flags=re.MULTILINE)
+                    if new_content != content:
+                        content = new_content
+                        content_modified = True
+                        requires_restart.append('max_players')
+                
+                if 'motd' in data:
+                    motd = data['motd'].replace('\\', '\\\\').replace('"', '\\"')
+                    new_content = re.sub(r'^motd=.*$', f'motd={motd}', content, flags=re.MULTILINE)
+                    if new_content != content:
+                        content = new_content
+                        content_modified = True
+                        requires_restart.append('motd')
+                
+                if 'online_mode' in data:
+                    online_mode = 'true' if data['online_mode'] else 'false'
+                    new_content = re.sub(r'^online-mode=.*$', f'online-mode={online_mode}', content, flags=re.MULTILINE)
+                    if new_content != content:
+                        content = new_content
+                        content_modified = True
+                        requires_restart.append('online_mode')
+                
+                if content_modified:
+                    with open(server_properties_path, 'w') as f:
+                        f.write(content)
+                    print(f"✅ server.properties actualizado para {server.name}")
+                    if requires_restart:
+                        print(f"⚠️ Los siguientes cambios requieren reinicio: {', '.join(requires_restart)}")
+            except Exception as e:
+                print(f"❌ Error escribiendo server.properties: {e}")
     
     # Log de cambios
     print(f"Aplicando settings para servidor {server.name}:")

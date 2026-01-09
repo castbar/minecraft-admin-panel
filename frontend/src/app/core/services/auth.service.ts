@@ -135,6 +135,10 @@ export class AuthService {
     }
   }
 
+  async loadCurrentServerIdFromStorage(): Promise<number | null> {
+    return await this.storage.get<number>(this.SERVER_ID_KEY);
+  }
+
   public async setAuthState(state: AuthState): Promise<void> {
     this.authState$.next(state);
     await this.storage.set(this.AUTH_KEY, state.isAuthenticated);

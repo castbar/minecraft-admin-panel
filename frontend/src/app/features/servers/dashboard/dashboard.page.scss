@@ -83,6 +83,32 @@ ion-card {
     font-weight: 400;
     margin-left: 0.5rem;
   }
+
+  // Estilos para TPS
+  .tps-good {
+    color: var(--ion-color-success);
+  }
+
+  .tps-warning {
+    color: var(--ion-color-warning);
+  }
+
+  .tps-bad {
+    color: var(--ion-color-danger);
+  }
+
+  // Estilos para MSPT
+  .mspt-good {
+    color: var(--ion-color-success);
+  }
+
+  .mspt-warning {
+    color: var(--ion-color-warning);
+  }
+
+  .mspt-bad {
+    color: var(--ion-color-danger);
+  }
 }
 
 .actions {
@@ -121,4 +147,26 @@ ion-card {
   padding: 20px;
   color: var(--ion-color-medium);
   font-style: italic;
+}
+
+.pending-restart-alert {
+  margin-bottom: 1rem;
+  
+  ion-item {
+    --background: rgba(var(--ion-color-warning-rgb), 0.1);
+    --border-radius: 8px;
+    margin-bottom: 0.5rem;
+    
+    ion-label {
+      h3 {
+        font-weight: 600;
+        color: var(--ion-color-warning-shade);
+      }
+      
+      p {
+        font-size: 0.875rem;
+        color: var(--ion-color-warning);
+      }
+    }
+  }
 }

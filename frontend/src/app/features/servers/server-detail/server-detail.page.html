@@ -23,6 +23,9 @@
       <ion-segment-button value="logs">
         <ion-label>Logs</ion-label>
       </ion-segment-button>
+      <ion-segment-button value="chat">
+        <ion-label>Chat</ion-label>
+      </ion-segment-button>
     </ion-segment>
 
     <div *ngIf="activeTab === 'overview'">
@@ -139,10 +142,18 @@
           </ion-list>
           <ion-button 
             expand="block" 
+            routerLink="/whitelist"
+            class="ion-margin-top">
+            <ion-icon name="people-outline" slot="start"></ion-icon>
+            Gestionar Whitelist
+          </ion-button>
+          <ion-button 
+            expand="block" 
             routerLink="/settings"
+            color="secondary"
             class="ion-margin-top">
             <ion-icon name="settings-outline" slot="start"></ion-icon>
-            Editar Configuración Completa
+            Configuración General
           </ion-button>
           <ion-button 
             expand="block" 
@@ -159,6 +170,12 @@
     <div *ngIf="activeTab === 'logs'">
       <div *ngIf="server" style="height: 600px;">
         <app-logs-viewer [serverId]="server.id" [autoRefresh]="true"></app-logs-viewer>
+      </div>
+    </div>
+
+    <div *ngIf="activeTab === 'chat'">
+      <div *ngIf="server" style="height: 600px;">
+        <app-chat-viewer [serverId]="server.id" [autoRefresh]="true"></app-chat-viewer>
       </div>
     </div>
   </div>

@@ -55,8 +55,9 @@ export class ServerService {
     return this.api.get<Server>(`/servers/${serverId}/settings/`);
   }
 
-  updateServerSettings(serverId: number, data: Partial<Server>): Observable<Server> {
-    return this.api.put<Server>(`/servers/${serverId}/settings/update/`, data);
+  updateServerSettings(serverId: number, data: Partial<Server>): Observable<any> {
+    // El backend espera POST, no PUT
+    return this.api.post<any>(`/servers/${serverId}/settings/update/`, data);
   }
 
   deleteServer(serverId: number): Observable<any> {

@@ -57,7 +57,11 @@ def mods_list(request, server_id=None):
         import docker
         try:
             client = docker.from_env()
-            container = client.containers.get(server.container_name)
+            try:
+                container = client.containers.get(server.container_name)
+            except docker.errors.NotFound:
+                # Contenedor no existe, retornar lista vacía
+                return JsonResponse({'success': True, 'data': [], 'message': f'Container {server.container_name} not found'})
             
             # Ejecutar comando para listar mods en el contenedor
             mods_path = '/data/mods'
@@ -69,9 +73,22 @@ def mods_list(request, server_id=None):
             else:
                 install_path = mods_path
             
+            # Verificar que el contenedor esté corriendo
+            if container.status != 'running':
+                return JsonResponse({'success': True, 'data': [], 'message': f'Container is not running (status: {container.status})'})
+            
+            # Crear directorio si no existe
+            container.exec_run(f'mkdir -p {install_path}', user='minecraft')
+            
             # Listar archivos en el contenedor - usar sh -c para que funcionen redirecciones
+            # Intentar primero con el usuario minecraft, si falla intentar con root
             result = container.exec_run(f'sh -c "ls -1 {install_path} 2>/dev/null || echo \\"\\""', user='minecraft')
+            if result.exit_code != 0:
+                # Si falla con minecraft, intentar con root
+                result = container.exec_run(f'sh -c "ls -1 {install_path} 2>/dev/null || echo \\"\\""', user='root')
+            
             files_str = result.output.decode('utf-8').strip()
+            
             # Filtrar solo archivos .jar y limpiar líneas vacías
             files = [f.strip() for f in files_str.split('\n') if f.strip() and f.strip().endswith('.jar')] if files_str else []
             
@@ -81,10 +98,18 @@ def mods_list(request, server_id=None):
                 size_result = container.exec_run(f'stat -c%s {install_path}/{file}', user='minecraft')
                 size = 0
                 try:
-                    size_str = size_result.output.decode('utf-8').strip()
-                    if size_str and size_str.isdigit():
-                        size = int(size_str)
-                except:
+                    if size_result.exit_code == 0:
+                        size_str = size_result.output.decode('utf-8').strip()
+                        if size_str and size_str.isdigit():
+                            size = int(size_str)
+                    else:
+                        # Intentar con root si falla con minecraft
+                        size_result = container.exec_run(f'stat -c%s {install_path}/{file}', user='root')
+                        if size_result.exit_code == 0:
+                            size_str = size_result.output.decode('utf-8').strip()
+                            if size_str and size_str.isdigit():
+                                size = int(size_str)
+                except Exception:
                     size = 0
                 
                 # Buscar en pool de mods - búsqueda exacta del nombre (ignorando extensión)
@@ -120,10 +145,11 @@ def mods_list(request, server_id=None):
                 mods.append(mod_info)
             
             return JsonResponse({'success': True, 'data': mods})
-        except Exception as e:
-            import traceback
-            traceback.print_exc()
+        except docker.errors.NotFound:
+            return JsonResponse({'success': True, 'data': [], 'message': 'Container not found'})
+        except Exception:
             # Continuar con método de filesystem si falla
+            pass
     
     # Método original: leer desde filesystem local
     mods_path = os.path.join(server.minecraft_data_path, 'mods')

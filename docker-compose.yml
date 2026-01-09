@@ -1,11 +1,9 @@
-version: '3.8'
-
 # ============================================
 # Minecraft Admin Panel
 # Panel de administración para servidores Minecraft
 # Red aislada: minecraft-admin
 # Puerto: 8000 (Panel Django)
-# 
+#
 # USO:
 #   - El archivo .env debe estar en el mismo directorio
 #   - Docker Compose leerá automáticamente las variables del .env
@@ -24,11 +22,11 @@ services:
   # Frontend Ionic (Nginx)
   minecraft-admin-frontend:
     # Usar imagen del registry (producción)
-    image: ${DOCKER_REGISTRY:-registry.castbar.dev}/${DOCKER_NAMESPACE:-castbar}/minecraft-admin-frontend:${IMAGE_TAG:-latest}
+    # image: ${DOCKER_REGISTRY:-registry.castbar.dev}/${DOCKER_NAMESPACE:-castbar}/minecraft-admin-frontend:${IMAGE_TAG:-latest}
     # Para desarrollo local, comentar 'image' y descomentar 'build':
-    # build:
-    #   context: ./frontend
-    #   dockerfile: Dockerfile
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
     container_name: minecraft-admin-frontend
     networks:
       - minecraft-admin
@@ -41,15 +39,15 @@ services:
   # Panel Django de Administración (Backend API)
   minecraft-admin-panel:
     # Usar imagen del registry (producción)
-    image: ${DOCKER_REGISTRY:-registry.castbar.dev}/${DOCKER_NAMESPACE:-castbar}/minecraft-admin-panel:${IMAGE_TAG:-latest}
+    # image: ${DOCKER_REGISTRY:-registry.castbar.dev}/${DOCKER_NAMESPACE:-castbar}/minecraft-admin-panel:${IMAGE_TAG:-latest}
     # Para desarrollo local, comentar 'image' y descomentar 'build':
-    # build:
-    #   context: ./panel
-    #   dockerfile: Dockerfile
+    build:
+      context: ./panel
+      dockerfile: Dockerfile
     container_name: minecraft-admin-panel
     networks:
       - minecraft-admin
-      - minecraft-servers  # Conectar también a la red de servidores Minecraft
+      - minecraft-servers # Conectar también a la red de servidores Minecraft
     # No exponer puerto 8000 públicamente, solo para nginx
     expose:
       - "8000"
@@ -71,4 +69,3 @@ volumes:
     driver: local
   panel_static:
     driver: local
-

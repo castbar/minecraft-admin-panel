@@ -1,0 +1,43 @@
+# Docker Compose para servidor Minecraft de prueba
+# Uso: docker-compose -f docker-compose.minecraft.yml up -d
+
+networks:
+  minecraft-servers:
+    external: true
+    name: minecraft-servers
+
+services:
+  minecraft-server-1:
+    image: itzg/minecraft-server:latest
+    container_name: ${CONTAINER_NAME:-minecraft-server-1}
+    networks:
+      - minecraft-servers
+    ports:
+      - "${GAME_PORT:-25565}:25565" # Puerto del juego
+    environment:
+      EULA: "TRUE"
+      TYPE: "${SERVER_TYPE:-VANILLA}"
+      VERSION: "${MC_VERSION:-1.21.1}"
+      MEMORY: "${MEMORY:-2G}"
+      # Configuración RCON (para control remoto)
+      ENABLE_RCON: "true"
+      RCON_PASSWORD: "${RCON_PASSWORD:-password123}"
+      RCON_PORT: "${RCON_PORT:-25575}"
+      # Configuración del servidor
+      DIFFICULTY: "${DIFFICULTY:-normal}"
+      MAX_PLAYERS: "${MAX_PLAYERS:-20}"
+      ONLINE_MODE: "${ONLINE_MODE:-false}"
+      PVP: "${PVP:-true}"
+      WHITELIST: "${WHITELIST:-false}"
+      # Mensajes
+      MOTD: "${MOTD:-Servidor de Prueba - Minecraft Admin Panel}"
+      SERVER_NAME: "${SERVER_NAME:-Servidor de Prueba}"
+    volumes:
+      - minecraft_server_1_data:/data
+    restart: unless-stopped
+    tty: true
+    stdin_open: true
+
+volumes:
+  minecraft_server_1_data:
+    driver: local

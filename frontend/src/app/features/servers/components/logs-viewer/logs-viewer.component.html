@@ -30,15 +30,18 @@
   <div class="logs-content" *ngIf="!isLoading; else loading">
     <div class="logs-container">
       <div 
-        *ngFor="let log of logs" 
+        *ngFor="let log of filteredLogs" 
         class="log-line"
         [class.log-error]="log.includes('ERROR') || log.includes('FATAL')"
         [class.log-warn]="log.includes('WARN') || log.includes('WARNING')"
         [class.log-info]="log.includes('INFO')">
         {{ log }}
       </div>
-      <div *ngIf="logs.length === 0" class="no-logs">
+      <div *ngIf="filteredLogs.length === 0 && logs.length === 0" class="no-logs">
         No hay logs disponibles
+      </div>
+      <div *ngIf="filteredLogs.length === 0 && logs.length > 0" class="no-logs">
+        Solo hay mensajes de chat. Ver la pestaña de Chat para verlos.
       </div>
     </div>
   </div>

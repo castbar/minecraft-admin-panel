@@ -1,27 +1,27 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterModule } from '@angular/router';
-import { 
-  IonHeader, 
-  IonToolbar, 
-  IonTitle, 
-  IonContent, 
-  IonMenu, 
+import {
+  IonHeader,
+  IonToolbar,
+  IonTitle,
+  IonContent,
+  IonMenu,
   IonMenuButton,
-  IonMenuToggle, 
-  IonButton, 
+  IonMenuToggle,
+  IonButton,
   IonIcon,
   IonItem,
   IonLabel,
   IonList,
   IonSelect,
   IonSelectOption,
-  MenuController
+  MenuController,
 } from '@ionic/angular/standalone';
 import { addIcons } from 'ionicons';
-import { 
-  menuOutline, 
-  logOutOutline, 
+import {
+  menuOutline,
+  logOutOutline,
   serverOutline,
   settingsOutline,
   peopleOutline,
@@ -30,11 +30,11 @@ import {
   homeOutline,
   chevronBackOutline,
   chevronForwardOutline,
-  checkmarkCircleOutline
+  checkmarkCircleOutline,
 } from 'ionicons/icons';
 import { AuthService } from '../../core/services/auth.service';
 import { ServerService } from '../../features/servers/services/server.service';
-import { Observable, BehaviorSubject, combineLatest } from 'rxjs';
+import { Observable, BehaviorSubject, combineLatest, of } from 'rxjs';
 import { map, tap, catchError } from 'rxjs/operators';
 import { Server } from '../../shared/models';
 import { ToastService } from '../../core/services/toast.service';
@@ -60,40 +60,54 @@ import { ToastService } from '../../core/services/toast.service';
     IonLabel,
     IonList,
     IonSelect,
-    IonSelectOption
-  ]
+    IonSelectOption,
+  ],
 })
 export class MainLayoutComponent implements OnInit {
   sidebarCollapsed$ = new BehaviorSubject<boolean>(false);
-  
+
   currentUser$ = this.authService.authState.pipe(
-    map(state => state.user)
+    map((state: any) => state.user)
   );
-  
+
   currentServerId$ = this.authService.authState.pipe(
-    map(state => state.currentServerId)
+    map((state: any) => state.currentServerId)
   );
 
   servers$: Observable<Server[]> = this.serverService.getServers().pipe(
-    tap(servers => {
-      // Si hay servidores y no hay uno seleccionado, seleccionar el primero
-      if (servers.length > 0 && !this.authService.currentServerId) {
-        this.authService.setCurrentServerId(servers[0].id);
+    tap((servers: any) => {
+      if (servers.length > 0) {
+        // Cargar currentServerId desde storage, si no está presente, usar el primero
+        this.authService.loadCurrentServerIdFromStorage().then(storedServerId => {
+          if (storedServerId) {
+            // Verificar que el servidor existe en la lista
+            const serverExists = servers.some((s: any) => s.id === storedServerId);
+            if (serverExists) {
+              this.authService.setCurrentServerId(storedServerId);
+            } else {
+              // Si el servidor guardado no existe, usar el primero
+              this.authService.setCurrentServerId(servers[0].id);
+            }
+          } else if (!this.authService.currentServerId) {
+            // Si no hay servidor guardado ni seleccionado, usar el primero
+            this.authService.setCurrentServerId(servers[0].id);
+          }
+        });
       }
     }),
-    catchError(error => {
+    catchError((error: any) => {
       this.toast.error('Error al cargar servidores');
-      return [];
+      return of([]);
     })
   );
 
   currentServer$: Observable<Server | null> = combineLatest([
     this.servers$,
-    this.currentServerId$
+    this.currentServerId$,
   ]).pipe(
-    map(([servers, serverId]) => {
+    map(([servers, serverId]: [any, any]) => {
       if (!serverId || servers.length === 0) return null;
-      return servers.find(s => s.id === serverId) || null;
+      return servers.find((s: any) => s.id === serverId) || null;
     })
   );
 
@@ -114,7 +128,7 @@ export class MainLayoutComponent implements OnInit {
       homeOutline,
       chevronBackOutline,
       chevronForwardOutline,
-      checkmarkCircleOutline
+      checkmarkCircleOutline,
     });
   }
 
@@ -140,4 +154,3 @@ export class MainLayoutComponent implements OnInit {
     return this.sidebarCollapsed$.value;
   }
 }
-

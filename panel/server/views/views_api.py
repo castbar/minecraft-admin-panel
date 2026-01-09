@@ -560,14 +560,22 @@ def server_logs(request, server_id=None):
                                 print(f"🔍 server_logs - Cat also failed, output: {exec_result.output.decode('utf-8', errors='ignore')[:200]}")
                     except docker.errors.NotFound as e:
                         print(f"❌ server_logs - Container {server.container_name} not found: {e}")
+                        # Contenedor no encontrado, devolver array vacío
+                        return JsonResponse({'success': True, 'data': [], 'server_status': 'not_found'})
                     except docker.errors.APIError as e:
                         print(f"❌ server_logs - Docker API error: {e}")
+                        # Error de Docker, devolver array vacío
+                        return JsonResponse({'success': True, 'data': [], 'server_status': 'error'})
                     except Exception as e:
                         print(f"❌ server_logs - Error reading logs from container: {e}")
                         import traceback
                         traceback.print_exc()
+                        # Error al leer logs, devolver array vacío
+                        return JsonResponse({'success': True, 'data': [], 'server_status': 'error'})
                 else:
                     print(f"⚠️ server_logs - Container {server.container_name} is not running (status: {container_status})")
+                    # Servidor apagado, devolver array vacío en lugar de continuar
+                    return JsonResponse({'success': True, 'data': [], 'server_status': container_status or 'stopped'})
             except Exception as e:
                 # Si falla docker, continuar con el método de sistema de archivos local
                 print(f"❌ server_logs - Error accessing Docker: {e}")
@@ -625,11 +633,24 @@ def server_logs(request, server_id=None):
                 except Exception as e:
                     return JsonResponse({'success': False, 'error': f'Error reading log file: {str(e)}'}, status=500)
         
-        return JsonResponse({'success': False, 'error': 'Log file not found'}, status=404)
+        # Si no se encontraron logs, verificar si el servidor está apagado
+        # Si el contenedor está apagado o no existe, devolver array vacío en lugar de error
+        if server.container_name:
+            try:
+                container_status = get_container_status(server.container_name)
+                if container_status in ['stopped', 'not_found', None]:
+                    # Servidor apagado, devolver array vacío
+                    return JsonResponse({'success': True, 'data': [], 'server_status': container_status or 'unknown'})
+            except:
+                pass
+        
+        # Si llegamos aquí y no hay logs, devolver array vacío en lugar de error 404
+        return JsonResponse({'success': True, 'data': [], 'message': 'No logs available'})
     except Exception as e:
         import traceback
         traceback.print_exc()
-        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+        # En caso de error, también devolver array vacío para evitar errores constantes
+        return JsonResponse({'success': True, 'data': [], 'error': str(e)})
 
 @login_required
 @require_http_methods(["GET"])
@@ -677,6 +698,59 @@ def server_stats(request, server_id=None):
                     memory_usage = stats['memory_stats'].get('usage', 0)
                     memory_max = stats['memory_stats'].get('limit', 0)
                     print(f"🔍 server_stats - Memoria: {memory_usage} / {memory_max}")
+                
+                # Obtener TPS vía RCON si está disponible
+                tps = None
+                mspt = None  # Milliseconds per tick
+                # Verificar conexión RCON
+                rcon_check = _get_rcon_connection(server)
+                is_rcon_connected = rcon_check is not None
+                if is_rcon_connected:
+                    try:
+                        rcon = rcon_check
+                        if rcon:
+                            # Intentar obtener TPS usando diferentes comandos según el tipo de servidor
+                            # Para servidores con Spark o Paper: /spark tps o /tps
+                            # Para servidores vanilla: usar /debug start y luego /debug stop para calcular
+                            try:
+                                # Intentar comando /tps primero (Paper/Spigot)
+                                tps_response = rcon.command('tps')
+                                print(f"🔍 server_stats - TPS response: {tps_response}")
+                                # Parsear respuesta como "TPS from last 1m, 5m, 15m: 20.0, 20.0, 20.0"
+                                import re
+                                tps_match = re.search(r'(\d+\.?\d*)', tps_response)
+                                if tps_match:
+                                    tps = float(tps_match.group(1))
+                            except:
+                                try:
+                                    # Intentar comando /spark tps (si Spark está instalado)
+                                    spark_response = rcon.command('spark tps')
+                                    print(f"🔍 server_stats - Spark TPS response: {spark_response}")
+                                    import re
+                                    tps_match = re.search(r'(\d+\.?\d*)', spark_response)
+                                    if tps_match:
+                                        tps = float(tps_match.group(1))
+                                except:
+                                    pass
+                            
+                            # Intentar obtener MSPT (milliseconds per tick)
+                            try:
+                                # Comando /tps también puede mostrar MSPT
+                                mspt_response = rcon.command('tps')
+                                import re
+                                mspt_match = re.search(r'(\d+\.?\d*)\s*ms', mspt_response, re.IGNORECASE)
+                                if mspt_match:
+                                    mspt = float(mspt_match.group(1))
+                            except:
+                                pass
+                            
+                            if rcon:
+                                try:
+                                    rcon.disconnect()
+                                except:
+                                    pass
+                    except Exception as e:
+                        print(f"⚠️ server_stats - Error obteniendo TPS: {e}")
             else:
                 print(f"⚠️ server_stats - Contenedor no está corriendo (status: {container.status})")
         except docker.errors.NotFound:
@@ -754,25 +828,36 @@ def server_control(request, server_id=None, action=None):
         return JsonResponse({'success': False, 'error': f'Invalid action. Valid: {valid_actions}'}, status=400)
     
     try:
+        result = None
         if action == 'start':
-            start_container(server.container_name)
+            result = start_container(server.container_name)
         elif action == 'stop':
-            stop_container(server.container_name)
+            result = stop_container(server.container_name)
         elif action == 'restart':
-            restart_container(server.container_name)
+            result = restart_container(server.container_name)
         elif action == 'pause':
-            pause_container(server.container_name)
+            result = pause_container(server.container_name)
         elif action == 'unpause':
-            unpause_container(server.container_name)
+            result = unpause_container(server.container_name)
         
-        send_notification(server, 'server_control', f"Comando '{action}' enviado al servidor '{server.name}'.")
-        return JsonResponse({
-            'success': True,
-            'message': f'Server {action} command sent to container {server.container_name}'
-        })
+        # Verificar resultado de la operación
+        if result and result.get('success'):
+            send_notification(server, 'server_control', f"Comando '{action}' ejecutado correctamente en '{server.name}'.")
+            return JsonResponse({
+                'success': True,
+                'message': result.get('message', f'Server {action} command executed successfully')
+            })
+        else:
+            error_msg = result.get('error', 'Error desconocido') if result else 'Error ejecutando comando'
+            send_notification(server, 'server_control_failed', f"Fallo el comando '{action}' para '{server.name}': {error_msg}")
+            return JsonResponse({
+                'success': False,
+                'error': error_msg
+            }, status=500)
     except Exception as e:
-        send_notification(server, 'server_control_failed', f"Fallo el comando '{action}' para '{server.name}': {str(e)}")
-        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+        error_msg = str(e)
+        send_notification(server, 'server_control_failed', f"Fallo el comando '{action}' para '{server.name}': {error_msg}")
+        return JsonResponse({'success': False, 'error': error_msg}, status=500)
 
 @csrf_exempt
 @login_required

@@ -22,6 +22,7 @@ export class LogsViewerComponent implements OnInit, OnDestroy {
   @Input() maxLines: number = 100;
 
   logs: string[] = [];
+  filteredLogs: string[] = []; // Logs sin mensajes de chat
   isLoading = false;
   private subscription?: Subscription;
 
@@ -48,16 +49,23 @@ export class LogsViewerComponent implements OnInit, OnDestroy {
     this.isLoading = true;
     this.logsService.getLogs(this.serverId, this.maxLines).pipe(
       catchError(error => {
-        this.toast.error('Error al cargar logs');
-        return of([]);
+        // No mostrar error si el servidor está apagado (404 o error de conexión)
+        // Solo mostrar error si es un error real del servidor
+        if (error.status !== 404 && error.status !== 0) {
+          this.toast.error('Error al cargar logs');
+        }
+        return of({ data: [] });
       })
     ).subscribe({
       next: (response: any) => {
         this.logs = response.data || response || [];
+        this.filterNonChatLogs();
         this.isLoading = false;
       },
       error: () => {
         this.isLoading = false;
+        // No mostrar error, simplemente dejar logs vacíos
+        this.logs = [];
       }
     });
   }
@@ -66,12 +74,28 @@ export class LogsViewerComponent implements OnInit, OnDestroy {
     this.stopAutoRefresh();
     this.subscription = interval(this.refreshInterval).pipe(
       switchMap(() => this.logsService.getLogs(this.serverId, this.maxLines).pipe(
-        catchError(() => of([]))
+        catchError(() => of({ data: [] })) // Devolver objeto con data vacía en lugar de array
       ))
     ).subscribe({
       next: (response: any) => {
         this.logs = response.data || response || [];
+        this.filterNonChatLogs();
       }
+    });
+  }
+
+  filterNonChatLogs(): void {
+    // Patrones que identifican mensajes de chat (excluir estos de los logs)
+    const chatPatterns = [
+      /\[Server thread\/INFO\]: <[^>]+>/,
+      /\[Server thread\/INFO\]: \[Server\]/,
+      /\[[^\]]+\/INFO\]: <[^>]+>/,
+      /\[INFO\]: <[^>]+>/,
+    ];
+
+    this.filteredLogs = this.logs.filter(log => {
+      // Excluir líneas que coincidan con patrones de chat
+      return !chatPatterns.some(pattern => pattern.test(log));
     });
   }
 

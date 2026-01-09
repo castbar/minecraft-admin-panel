@@ -1,41 +1,87 @@
 """
 Módulo para controlar contenedores Docker desde Django
 """
-import subprocess
 import json
 import os
 from typing import Optional, Dict, List
+import docker
+
+def _get_docker_client():
+    """Obtener cliente Docker conectado al socket"""
+    try:
+        return docker.from_env()
+    except Exception as e:
+        raise Exception(f'Error conectando a Docker: {str(e)}')
 
 def docker_command(command: List[str], timeout: int = 30) -> Dict[str, any]:
     """
-    Ejecutar comando Docker y retornar resultado
+    Ejecutar comando Docker usando la librería de Python (compatibilidad)
+    
+    NOTA: Esta función se mantiene para compatibilidad, pero ahora usa la librería docker
+    en lugar de subprocess, ya que el contenedor no tiene el CLI de Docker instalado.
     
     Args:
         command: Lista de argumentos para docker (ej: ['ps', '-a'])
-        timeout: Timeout en segundos
+        timeout: Timeout en segundos (no usado con la librería)
     
     Returns:
         Dict con 'success', 'output', 'error'
     """
     try:
-        result = subprocess.run(
-            ['docker'] + command,
-            capture_output=True,
-            text=True,
-            timeout=timeout
-        )
+        client = _get_docker_client()
         
-        return {
-            'success': result.returncode == 0,
-            'output': result.stdout.strip(),
-            'error': result.stderr.strip() if result.returncode != 0 else None,
-            'returncode': result.returncode
-        }
-    except subprocess.TimeoutExpired:
+        # Mapear comandos comunes a métodos de la librería
+        cmd = command[0] if command else None
+        
+        if cmd == 'inspect':
+            container_name = command[1] if len(command) > 1 else None
+            if not container_name:
+                return {'success': False, 'error': 'Container name required for inspect'}
+            
+            try:
+                container = client.containers.get(container_name)
+                if '--format' in command:
+                    # Si hay formato JSON, devolver JSON
+                    format_idx = command.index('--format')
+                    if format_idx + 1 < len(command):
+                        format_str = command[format_idx + 1]
+                        if 'json' in format_str.lower():
+                            import json
+                            return {
+                                'success': True,
+                                'output': json.dumps(container.attrs),
+                                'error': None,
+                                'returncode': 0
+                            }
+                        # Si es formato simple, extraer el campo
+                        if '{{.State.Status}}' in format_str:
+                            return {
+                                'success': True,
+                                'output': container.status,
+                                'error': None,
+                                'returncode': 0
+                            }
+                
+                # Por defecto, devolver JSON completo
+                return {
+                    'success': True,
+                    'output': json.dumps(container.attrs),
+                    'error': None,
+                    'returncode': 0
+                }
+            except docker.errors.NotFound:
+                return {
+                    'success': False,
+                    'error': f'No such container: {container_name}',
+                    'output': '',
+                    'returncode': 1
+                }
+        
+        # Para otros comandos, usar métodos directos de la librería
         return {
             'success': False,
+            'error': f'Comando no soportado directamente: {cmd}. Use las funciones específicas.',
             'output': '',
-            'error': f'Timeout después de {timeout} segundos',
             'returncode': -1
         }
     except Exception as e:
@@ -53,22 +99,24 @@ def get_container_status(container_name: str) -> Optional[str]:
     Returns:
         'running', 'paused', 'stopped', 'not_found', None si error
     """
-    result = docker_command(['inspect', container_name, '--format', '{{.State.Status}}'])
-    
-    if not result['success']:
-        if 'No such container' in result['error']:
-            return 'not_found'
+    try:
+        client = _get_docker_client()
+        container = client.containers.get(container_name)
+        status = container.status.lower()
+        
+        if status == 'running':
+            return 'running'
+        elif status == 'paused':
+            return 'paused'
+        elif status in ['exited', 'stopped', 'dead', 'created']:
+            return 'stopped'
+        else:
+            return status
+    except docker.errors.NotFound:
+        return 'not_found'
+    except Exception as e:
+        print(f"Error obteniendo estado del contenedor: {e}")
         return None
-    
-    status = result['output'].lower()
-    if status == 'running':
-        return 'running'
-    elif status == 'paused':
-        return 'paused'
-    elif status in ['exited', 'stopped', 'dead']:
-        return 'stopped'
-    else:
-        return status
 
 def start_container(container_name: str) -> Dict[str, any]:
     """
@@ -77,36 +125,42 @@ def start_container(container_name: str) -> Dict[str, any]:
     Returns:
         Dict con 'success', 'message', 'error'
     """
-    # Verificar estado actual
-    status = get_container_status(container_name)
-    
-    if status == 'running':
-        return {
-            'success': True,
-            'message': f'Contenedor {container_name} ya está en ejecución',
-            'status': 'running'
-        }
-    
-    if status == 'not_found':
-        return {
-            'success': False,
-            'error': f'Contenedor {container_name} no existe',
-            'status': 'not_found'
-        }
-    
-    # Iniciar contenedor
-    result = docker_command(['start', container_name])
-    
-    if result['success']:
+    try:
+        client = _get_docker_client()
+        container = client.containers.get(container_name)
+        
+        # Verificar estado actual
+        status = container.status.lower()
+        
+        if status == 'running':
+            return {
+                'success': True,
+                'message': f'Contenedor {container_name} ya está en ejecución',
+                'status': 'running'
+            }
+        
+        # Restaurar política de reinicio antes de iniciar
+        container.update(restart_policy={"Name": "unless-stopped"})
+        
+        # Iniciar contenedor
+        container.start()
+        
         return {
             'success': True,
             'message': f'Contenedor {container_name} iniciado correctamente',
             'status': 'running'
         }
-    else:
+    except docker.errors.NotFound:
         return {
             'success': False,
-            'error': result['error'] or 'Error desconocido al iniciar contenedor',
+            'error': f'Contenedor {container_name} no existe',
+            'status': 'not_found'
+        }
+    except Exception as e:
+        status = get_container_status(container_name)
+        return {
+            'success': False,
+            'error': str(e) or 'Error desconocido al iniciar contenedor',
             'status': status
         }
 
@@ -121,29 +175,42 @@ def stop_container(container_name: str, timeout: int = 10) -> Dict[str, any]:
     Returns:
         Dict con 'success', 'message', 'error'
     """
-    # Verificar estado actual
-    status = get_container_status(container_name)
-    
-    if status == 'stopped' or status == 'not_found':
-        return {
-            'success': True,
-            'message': f'Contenedor {container_name} ya está detenido',
-            'status': 'stopped'
-        }
-    
-    # Detener contenedor
-    result = docker_command(['stop', '--time', str(timeout), container_name])
-    
-    if result['success']:
+    try:
+        client = _get_docker_client()
+        container = client.containers.get(container_name)
+        
+        # Verificar estado actual
+        status = container.status.lower()
+        
+        if status in ['exited', 'stopped', 'dead', 'created']:
+            return {
+                'success': True,
+                'message': f'Contenedor {container_name} ya está detenido',
+                'status': 'stopped'
+            }
+        
+        # Primero, desactivar la política de reinicio para evitar que Docker reinicie el contenedor
+        container.update(restart_policy={"Name": "no"})
+        
+        # Detener contenedor
+        container.stop(timeout=timeout)
+        
         return {
             'success': True,
             'message': f'Contenedor {container_name} detenido correctamente',
             'status': 'stopped'
         }
-    else:
+    except docker.errors.NotFound:
         return {
             'success': False,
-            'error': result['error'] or 'Error desconocido al detener contenedor',
+            'error': f'Contenedor {container_name} no existe',
+            'status': 'not_found'
+        }
+    except Exception as e:
+        status = get_container_status(container_name)
+        return {
+            'success': False,
+            'error': str(e) or 'Error desconocido al detener contenedor',
             'status': status
         }
 
@@ -154,19 +221,29 @@ def restart_container(container_name: str, timeout: int = 10) -> Dict[str, any]:
     Returns:
         Dict con 'success', 'message', 'error'
     """
-    result = docker_command(['restart', '--time', str(timeout), container_name])
-    
-    if result['success']:
+    try:
+        client = _get_docker_client()
+        container = client.containers.get(container_name)
+        
+        # Reiniciar contenedor
+        container.restart(timeout=timeout)
+        
         return {
             'success': True,
             'message': f'Contenedor {container_name} reiniciado correctamente',
             'status': 'running'
         }
-    else:
+    except docker.errors.NotFound:
+        return {
+            'success': False,
+            'error': f'Contenedor {container_name} no existe',
+            'status': 'not_found'
+        }
+    except Exception as e:
         status = get_container_status(container_name)
         return {
             'success': False,
-            'error': result['error'] or 'Error desconocido al reiniciar contenedor',
+            'error': str(e) or 'Error desconocido al reiniciar contenedor',
             'status': status
         }
 
@@ -177,27 +254,37 @@ def pause_container(container_name: str) -> Dict[str, any]:
     Returns:
         Dict con 'success', 'message', 'error'
     """
-    status = get_container_status(container_name)
-    
-    if status != 'running':
-        return {
-            'success': False,
-            'error': f'Contenedor {container_name} no está en ejecución (estado: {status})',
-            'status': status
-        }
-    
-    result = docker_command(['pause', container_name])
-    
-    if result['success']:
+    try:
+        client = _get_docker_client()
+        container = client.containers.get(container_name)
+        
+        status = container.status.lower()
+        
+        if status != 'running':
+            return {
+                'success': False,
+                'error': f'Contenedor {container_name} no está en ejecución (estado: {status})',
+                'status': status
+            }
+        
+        container.pause()
+        
         return {
             'success': True,
             'message': f'Contenedor {container_name} pausado correctamente',
             'status': 'paused'
         }
-    else:
+    except docker.errors.NotFound:
         return {
             'success': False,
-            'error': result['error'] or 'Error desconocido al pausar contenedor',
+            'error': f'Contenedor {container_name} no existe',
+            'status': 'not_found'
+        }
+    except Exception as e:
+        status = get_container_status(container_name)
+        return {
+            'success': False,
+            'error': str(e) or 'Error desconocido al pausar contenedor',
             'status': status
         }
 
@@ -208,27 +295,37 @@ def unpause_container(container_name: str) -> Dict[str, any]:
     Returns:
         Dict con 'success', 'message', 'error'
     """
-    status = get_container_status(container_name)
-    
-    if status != 'paused':
-        return {
-            'success': False,
-            'error': f'Contenedor {container_name} no está pausado (estado: {status})',
-            'status': status
-        }
-    
-    result = docker_command(['unpause', container_name])
-    
-    if result['success']:
+    try:
+        client = _get_docker_client()
+        container = client.containers.get(container_name)
+        
+        status = container.status.lower()
+        
+        if status != 'paused':
+            return {
+                'success': False,
+                'error': f'Contenedor {container_name} no está pausado (estado: {status})',
+                'status': status
+            }
+        
+        container.unpause()
+        
         return {
             'success': True,
             'message': f'Contenedor {container_name} reanudado correctamente',
             'status': 'running'
         }
-    else:
+    except docker.errors.NotFound:
         return {
             'success': False,
-            'error': result['error'] or 'Error desconocido al reanudar contenedor',
+            'error': f'Contenedor {container_name} no existe',
+            'status': 'not_found'
+        }
+    except Exception as e:
+        status = get_container_status(container_name)
+        return {
+            'success': False,
+            'error': str(e) or 'Error desconocido al reanudar contenedor',
             'status': status
         }
 
@@ -263,6 +360,121 @@ def create_container_from_compose(service_name: str, compose_file: str = None) -
             'output': result['output']
         }
 
+def create_minecraft_container(server) -> Dict[str, any]:
+    """
+    Crear un contenedor Docker para un servidor Minecraft usando docker SDK
+    
+    Args:
+        server: Instancia del modelo Server
+    
+    Returns:
+        Dict con 'success', 'message', 'error', 'status'
+    """
+    try:
+        client = _get_docker_client()
+        
+        # Verificar si el contenedor ya existe
+        try:
+            existing = client.containers.get(server.container_name)
+            return {
+                'success': False,
+                'error': f'El contenedor {server.container_name} ya existe',
+                'status': existing.status
+            }
+        except docker.errors.NotFound:
+            pass  # El contenedor no existe, continuar con la creación
+        
+        # Determinar imagen según tipo de servidor
+        image_map = {
+            'vanilla': 'itzg/minecraft-server:latest',
+            'paper': 'itzg/minecraft-server:latest',
+            'spigot': 'itzg/minecraft-server:latest',
+            'bukkit': 'itzg/minecraft-server:latest',
+            'fabric': 'itzg/minecraft-server:latest',
+            'forge': 'itzg/minecraft-server:latest',
+        }
+        image = image_map.get(server.server_type, 'itzg/minecraft-server:latest')
+        
+        # Preparar variables de entorno
+        env_vars = {
+            'EULA': 'TRUE',
+            'TYPE': server.server_type.upper(),
+            'VERSION': server.minecraft_version if server.minecraft_version != 'latest' else 'LATEST',
+            'MEMORY': f'{server.memory_limit_mb}M',
+            'ENABLE_RCON': 'true',
+            'RCON_PASSWORD': server.rcon_password,
+            'RCON_PORT': str(server.rcon_port),
+            'MAX_PLAYERS': str(server.max_players if hasattr(server, 'max_players') else 20),
+            'ONLINE_MODE': 'true' if server.online_mode else 'false',
+            'WHITELIST': 'true' if server.enable_whitelist else 'false',
+        }
+        
+        # Agregar configuración adicional si existe
+        if hasattr(server, 'motd') and server.motd:
+            env_vars['MOTD'] = server.motd
+        if hasattr(server, 'difficulty') and server.difficulty:
+            env_vars['DIFFICULTY'] = server.difficulty
+        
+        # Crear volumen para los datos
+        volume_name = f'{server.container_name}_data'
+        
+        # Crear volumen si no existe
+        try:
+            client.volumes.get(volume_name)
+        except docker.errors.NotFound:
+            client.volumes.create(name=volume_name, driver='local')
+        
+        # Preparar puertos
+        ports = {}
+        port_bindings = {}
+        if hasattr(server, 'server_port') and server.server_port:
+            ports['25565/tcp'] = {}
+            port_bindings['25565/tcp'] = [{'HostPort': str(server.server_port), 'HostIp': '0.0.0.0'}]
+        
+        # Crear el contenedor
+        container = client.containers.create(
+            image=image,
+            name=server.container_name,
+            environment=env_vars,
+            volumes={volume_name: {'bind': '/data', 'mode': 'rw'}},
+            ports=ports,
+            host_config=client.api.create_host_config(
+                restart_policy={'Name': 'unless-stopped'},
+                mem_limit=f'{server.memory_limit_mb}m',
+                mem_reservation=f'{server.java_heap_min_mb}m',
+                binds=[f'{volume_name}:/data:rw'],
+                port_bindings=port_bindings if port_bindings else None,
+            ),
+            tty=True,
+            stdin_open=True,
+        )
+        
+        return {
+            'success': True,
+            'message': f'Contenedor {server.container_name} creado correctamente',
+            'status': 'created',
+            'container_id': container.id
+        }
+        
+    except docker.errors.ImageNotFound:
+        return {
+            'success': False,
+            'error': f'Imagen {image} no encontrada. Asegúrate de que la imagen esté disponible.',
+            'status': 'error'
+        }
+    except docker.errors.APIError as e:
+        return {
+            'success': False,
+            'error': f'Error de Docker API: {str(e)}',
+            'status': 'error'
+        }
+    except Exception as e:
+        return {
+            'success': False,
+            'error': f'Error al crear contenedor: {str(e)}',
+            'status': 'error'
+        }
+
 def get_container_info(container_name: str) -> Dict[str, any]:
     """
     Obtener información detallada de un contenedor
@@ -270,30 +482,33 @@ def get_container_info(container_name: str) -> Dict[str, any]:
     Returns:
         Dict con información del contenedor
     """
-    result = docker_command(['inspect', container_name, '--format', '{{json .}}'])
-    
-    if not result['success']:
-        return {
-            'success': False,
-            'error': result['error'] or 'Contenedor no encontrado'
-        }
-    
     try:
-        info = json.loads(result['output'])
+        client = _get_docker_client()
+        container = client.containers.get(container_name)
+        
+        attrs = container.attrs
+        state = attrs.get('State', {})
+        config = attrs.get('Config', {})
+        
         return {
             'success': True,
-            'name': info.get('Name', '').lstrip('/'),
-            'status': info.get('State', {}).get('Status', 'unknown'),
-            'running': info.get('State', {}).get('Running', False),
-            'paused': info.get('State', {}).get('Paused', False),
-            'restarting': info.get('State', {}).get('Restarting', False),
-            'started_at': info.get('State', {}).get('StartedAt', ''),
-            'image': info.get('Config', {}).get('Image', ''),
+            'name': attrs.get('Name', '').lstrip('/'),
+            'status': state.get('Status', 'unknown'),
+            'running': state.get('Running', False),
+            'paused': state.get('Paused', False),
+            'restarting': state.get('Restarting', False),
+            'started_at': state.get('StartedAt', ''),
+            'image': config.get('Image', ''),
         }
-    except json.JSONDecodeError:
+    except docker.errors.NotFound:
         return {
             'success': False,
-            'error': 'Error al parsear información del contenedor'
+            'error': 'Contenedor no encontrado'
+        }
+    except Exception as e:
+        return {
+            'success': False,
+            'error': f'Error obteniendo información del contenedor: {str(e)}'
         }
 
 def update_container_memory(container_name: str, memory_limit_mb: int) -> Dict[str, any]:
@@ -309,32 +524,28 @@ def update_container_memory(container_name: str, memory_limit_mb: int) -> Dict[s
     Returns:
         Dict con 'success', 'message', 'error'
     """
-    # Verificar que el contenedor existe
-    status = get_container_status(container_name)
-    if status == 'not_found':
-        return {
-            'success': False,
-            'error': f'Contenedor {container_name} no existe'
-        }
-    
-    # Actualizar límite de memoria usando docker update
-    result = docker_command([
-        'update',
-        '--memory', f'{memory_limit_mb}m',
-        '--memory-swap', f'{memory_limit_mb}m',
-        container_name
-    ])
-    
-    if result['success']:
+    try:
+        client = _get_docker_client()
+        container = client.containers.get(container_name)
+        
+        # Actualizar límite de memoria
+        memory_bytes = memory_limit_mb * 1024 * 1024  # Convertir MB a bytes
+        container.update(mem_limit=memory_bytes, memswap_limit=memory_bytes)
+        
         return {
             'success': True,
             'message': f'Límite de memoria actualizado a {memory_limit_mb}MB. Reinicia el contenedor para aplicar cambios.',
             'requires_restart': True
         }
-    else:
+    except docker.errors.NotFound:
         return {
             'success': False,
-            'error': result['error'] or 'Error al actualizar límite de memoria'
+            'error': f'Contenedor {container_name} no existe'
+        }
+    except Exception as e:
+        return {
+            'success': False,
+            'error': str(e) or 'Error al actualizar límite de memoria'
         }
 
 def get_recommended_memory(server_type: str, players_online: int = 0) -> Dict[str, int]:

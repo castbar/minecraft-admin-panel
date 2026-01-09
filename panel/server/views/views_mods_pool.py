@@ -6,7 +6,9 @@ from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 from django.views.decorators.csrf import csrf_exempt
 from django.shortcuts import get_object_or_404
+from django.conf import settings
 import json
+import os
 from ..models.models_mods_pool import ModPool
 
 @login_required
@@ -14,64 +16,115 @@ from ..models.models_mods_pool import ModPool
 def mods_pool_list(request):
     """
     Listar mods/plugins del pool disponibles
-    Filtra por tipo de servidor si se proporciona server_id
+    Filtra por tipo de servidor si se proporciona server_type
     """
-    server_type = request.GET.get('server_type')
-    category = request.GET.get('category')
-    is_popular = request.GET.get('is_popular', '').lower() == 'true'
-    is_recommended = request.GET.get('is_recommended', '').lower() == 'true'
-    
-    mods = ModPool.objects.filter(is_active=True)
-    
-    # Filtrar por tipo de servidor
-    if server_type:
-        if server_type == 'vanilla':
-            mods = mods.filter(compatible_vanilla=True)
-        elif server_type == 'fabric':
-            mods = mods.filter(compatible_fabric=True)
-        elif server_type == 'forge':
-            mods = mods.filter(compatible_forge=True)
-        elif server_type == 'bukkit':
-            mods = mods.filter(compatible_bukkit=True)
-        elif server_type == 'spigot':
-            mods = mods.filter(compatible_spigot=True)
-        elif server_type == 'paper':
-            mods = mods.filter(compatible_paper=True)
-    
-    # Filtrar por categoría
-    if category:
-        mods = mods.filter(category=category)
-    
-    # Filtrar populares
-    if is_popular:
-        mods = mods.filter(is_popular=True)
-    
-    # Filtrar recomendados
-    if is_recommended:
-        mods = mods.filter(is_recommended=True)
-    
-    mods = mods.order_by('-is_recommended', '-is_popular', 'display_name')
-    
-    data = [{
-        'id': m.id,
-        'name': m.name,
-        'display_name': m.display_name,
-        'mod_type': m.mod_type,
-        'compatible_server_types': m.get_compatible_server_types(),
-        'description': m.description,
-        'category': m.category,
-        'version': m.version,
-        'is_popular': m.is_popular,
-        'is_recommended': m.is_recommended,
-        'has_config': bool(m.config_file_path),
-        'config_file_path': m.config_file_path,
-        'config_format': m.config_format,
-        'modrinth_id': m.modrinth_id,
-        'curseforge_id': m.curseforge_id,
-        'download_url': m.download_url,
-    } for m in mods]
-    
-    return JsonResponse({'success': True, 'data': data})
+    try:
+        server_type = request.GET.get('server_type')
+        category = request.GET.get('category')
+        is_popular = request.GET.get('is_popular', '').lower() == 'true'
+        is_recommended = request.GET.get('is_recommended', '').lower() == 'true'
+        
+        mods = ModPool.objects.filter(is_active=True)
+        
+        # Especificar solo los campos que necesitamos para evitar cargar file_path
+        # que puede no existir en la base de datos
+        mods = mods.only(
+            'id', 'name', 'display_name', 'mod_type',
+            'compatible_vanilla', 'compatible_fabric', 'compatible_forge',
+            'compatible_bukkit', 'compatible_spigot', 'compatible_paper',
+            'description', 'category', 'version',
+            'is_popular', 'is_recommended',
+            'config_file_path', 'config_format',
+            'modrinth_id', 'curseforge_id', 'download_url'
+        )
+        
+        # Filtrar por tipo de servidor
+        if server_type:
+            if server_type == 'vanilla':
+                mods = mods.filter(compatible_vanilla=True)
+            elif server_type == 'fabric':
+                mods = mods.filter(compatible_fabric=True)
+            elif server_type == 'forge':
+                mods = mods.filter(compatible_forge=True)
+            elif server_type == 'bukkit':
+                mods = mods.filter(compatible_bukkit=True)
+            elif server_type == 'spigot':
+                mods = mods.filter(compatible_spigot=True)
+            elif server_type == 'paper':
+                mods = mods.filter(compatible_paper=True)
+        
+        # Filtrar por categoría
+        if category:
+            mods = mods.filter(category=category)
+        
+        # Filtrar populares
+        if is_popular:
+            mods = mods.filter(is_popular=True)
+        
+        # Filtrar recomendados
+        if is_recommended:
+            mods = mods.filter(is_recommended=True)
+        
+        mods = mods.order_by('-is_recommended', '-is_popular', 'display_name')
+        
+        data = []
+        for m in mods:
+            try:
+                compatible_types = []
+                try:
+                    compatible_types = m.get_compatible_server_types()
+                except Exception as e:
+                    # Si falla get_compatible_server_types, construir manualmente
+                    if m.compatible_vanilla:
+                        compatible_types.append('vanilla')
+                    if m.compatible_fabric:
+                        compatible_types.append('fabric')
+                    if m.compatible_forge:
+                        compatible_types.append('forge')
+                    if m.compatible_bukkit:
+                        compatible_types.append('bukkit')
+                    if m.compatible_spigot:
+                        compatible_types.append('spigot')
+                    if m.compatible_paper:
+                        compatible_types.append('paper')
+                
+                mod_data = {
+                    'id': m.id,
+                    'name': m.name,
+                    'display_name': m.display_name or m.name,
+                    'mod_type': m.mod_type or 'mod',
+                    'compatible_server_types': compatible_types,
+                    'description': m.description or '',
+                    'category': m.category or '',
+                    'version': m.version or '',
+                    'is_popular': bool(m.is_popular),
+                    'is_recommended': bool(m.is_recommended),
+                    'has_config': bool(m.config_file_path) if hasattr(m, 'config_file_path') else False,
+                    'config_file_path': m.config_file_path or '' if hasattr(m, 'config_file_path') else '',
+                    'config_format': m.config_format or 'json' if hasattr(m, 'config_format') else 'json',
+                    'modrinth_id': m.modrinth_id or '',
+                    'curseforge_id': m.curseforge_id or '',
+                    'download_url': m.download_url or '',
+                }
+                # Solo agregar file_path si existe en el modelo
+                if hasattr(m, 'file_path'):
+                    mod_data['file_path'] = m.file_path or ''
+                data.append(mod_data)
+            except Exception as e:
+                import traceback
+                traceback.print_exc()
+                # Continuar con el siguiente mod si hay error
+                continue
+        
+        return JsonResponse({'success': True, 'data': data})
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JsonResponse({
+            'success': False,
+            'error': f'Error al cargar pool de mods: {str(e)}',
+            'data': []
+        }, status=500)
 
 @login_required
 @require_http_methods(["GET"])
@@ -183,9 +236,14 @@ def mods_pool_install(request, server_id=None):
         # Buscar archivo del mod
         mods_pool_path = getattr(settings, 'MODS_POOL_PATH', '/data/mods_pool')
         
-        # Si tiene file_path configurado, usarlo
-        if mod_pool.file_path and os.path.exists(mod_pool.file_path):
-            source_file = mod_pool.file_path
+        # Si tiene file_path configurado, usarlo (verificar si existe primero)
+        source_file = None
+        if hasattr(mod_pool, 'file_path') and mod_pool.file_path:
+            try:
+                if os.path.exists(mod_pool.file_path):
+                    source_file = mod_pool.file_path
+            except:
+                pass
         else:
             # Buscar por nombre común
             possible_names = [

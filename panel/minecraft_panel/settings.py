@@ -154,9 +154,17 @@ REST_FRAMEWORK = {
 CORS_ALLOWED_ORIGINS = [
     'http://localhost:4200',  # Angular dev server
     'http://localhost:8100',  # Ionic dev server
+    'http://localhost:8080',  # Frontend Nginx
 ]
 CORS_ALLOW_ALL_ORIGINS = os.environ.get('CORS_ALLOW_ALL', 'False') == 'True'  # Solo en desarrollo
 CORS_ALLOW_CREDENTIALS = True  # Permitir cookies para autenticación por sesión
+
+# CSRF Trusted Origins
+CSRF_TRUSTED_ORIGINS = [
+    'http://localhost:8080',  # Frontend Nginx
+    'http://localhost:4200',  # Angular dev server
+    'http://localhost:8100',  # Ionic dev server
+]
 
 # Email Configuration
 # Por defecto usar console backend para desarrollo (imprime emails en consola)

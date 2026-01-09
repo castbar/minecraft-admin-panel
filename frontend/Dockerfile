@@ -1,4 +1,21 @@
-# Dockerfile para frontend Ionic con Nginx
+# Etapa 1: Compilar el frontend Ionic
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+# Copiar archivos de dependencias
+COPY package*.json ./
+
+# Instalar dependencias
+RUN npm ci
+
+# Copiar código fuente
+COPY . .
+
+# Compilar el proyecto para producción
+RUN npm run build -- --configuration=production
+
+# Etapa 2: Servir con Nginx
 FROM nginx:alpine
 
 # Instalar wget para health check
@@ -7,13 +24,13 @@ RUN apk add --no-cache wget
 # Copiar configuración de Nginx
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-# Copiar archivos del frontend compilado (Ionic usa www/ en versiones recientes)
-# El script de build crea un symlink o copia www/ a dist/ para compatibilidad
-COPY www/ /usr/share/nginx/html/
+# Copiar archivos compilados desde la etapa de build
+# Ionic/Angular compila a www/ o dist/
+COPY --from=builder /app/www /usr/share/nginx/html
 
 # Verificar que index.html existe
 RUN if [ ! -f /usr/share/nginx/html/index.html ]; then \
-      echo "ERROR: index.html no encontrado en www/" >&2; \
+      echo "ERROR: index.html no encontrado después del build" >&2; \
       exit 1; \
     fi
 

@@ -19,16 +19,16 @@ import {
   IonSpinner,
   IonBadge,
   IonSearchbar,
-  IonAlert
+  IonAlert,
 } from '@ionic/angular/standalone';
 import { AlertController } from '@ionic/angular';
 import { addIcons } from 'ionicons';
-import { 
-  addOutline, 
-  removeOutline, 
+import {
+  addOutline,
+  removeOutline,
   searchOutline,
   checkmarkOutline,
-  closeOutline
+  closeOutline,
 } from 'ionicons/icons';
 import { WhitelistService } from '../services/whitelist.service';
 import { AuthService } from '../../../core/services/auth.service';
@@ -59,8 +59,8 @@ import { ToastService } from '../../../core/services/toast.service';
     IonSpinner,
     IonBadge,
     IonSearchbar,
-    IonAlert
-  ]
+    IonAlert,
+  ],
 })
 export class WhitelistPage implements OnInit {
   whitelist: string[] = [];
@@ -81,7 +81,7 @@ export class WhitelistPage implements OnInit {
       removeOutline,
       searchOutline,
       checkmarkOutline,
-      closeOutline
+      closeOutline,
     });
   }
 
@@ -99,14 +99,31 @@ export class WhitelistPage implements OnInit {
     this.loading = true;
     this.whitelistService.getWhitelist(serverId).subscribe({
       next: (response: any) => {
-        this.whitelist = response.data || response || [];
+        const data = response.data || response || [];
+
+        if (
+          Array.isArray(data) &&
+          data.length > 0 &&
+          typeof data[0] === 'object'
+        ) {
+          this.whitelist = data.map(
+            (item: any) =>
+              item.name ||
+              item.username ||
+              item.player_name ||
+              JSON.stringify(item)
+          );
+        } else {
+          this.whitelist = data;
+        }
+
         this.filterWhitelist();
         this.loading = false;
       },
-      error: () => {
+      error: (error: any) => {
         this.toast.error('Error al cargar whitelist');
         this.loading = false;
-      }
+      },
     });
   }
 
@@ -117,7 +134,7 @@ export class WhitelistPage implements OnInit {
     }
 
     const term = this.searchTerm.toLowerCase();
-    this.filteredWhitelist = this.whitelist.filter(player =>
+    this.filteredWhitelist = this.whitelist.filter((player) =>
       player.toLowerCase().includes(term)
     );
   }
@@ -140,18 +157,22 @@ export class WhitelistPage implements OnInit {
     }
 
     this.addingPlayer = true;
-    this.whitelistService.addToWhitelist(serverId, this.newPlayerName.trim()).subscribe({
-      next: () => {
-        this.toast.success(`Jugador ${this.newPlayerName} agregado a la whitelist`);
-        this.newPlayerName = '';
-        this.loadWhitelist();
-        this.addingPlayer = false;
-      },
-      error: (error: any) => {
-        this.toast.error(error.message || 'Error al agregar jugador');
-        this.addingPlayer = false;
-      }
-    });
+    this.whitelistService
+      .addToWhitelist(serverId, this.newPlayerName.trim())
+      .subscribe({
+        next: () => {
+          this.toast.success(
+            `Jugador ${this.newPlayerName} agregado a la whitelist`
+          );
+          this.newPlayerName = '';
+          this.loadWhitelist();
+          this.addingPlayer = false;
+        },
+        error: (error: any) => {
+          this.toast.error(error.message || 'Error al agregar jugador');
+          this.addingPlayer = false;
+        },
+      });
   }
 
   async removePlayer(playerName: string): Promise<void> {
@@ -161,16 +182,16 @@ export class WhitelistPage implements OnInit {
       buttons: [
         {
           text: 'Cancelar',
-          role: 'cancel'
+          role: 'cancel',
         },
         {
           text: 'Eliminar',
           role: 'destructive',
           handler: () => {
             this.doRemovePlayer(playerName);
-          }
-        }
-      ]
+          },
+        },
+      ],
     });
 
     await alert.present();
@@ -190,8 +211,7 @@ export class WhitelistPage implements OnInit {
       },
       error: (error: any) => {
         this.toast.error(error.message || 'Error al eliminar jugador');
-      }
+      },
     });
   }
 }
-

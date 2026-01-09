@@ -39,6 +39,7 @@ import { ToastService } from '../../../core/services/toast.service';
 import { Server, ServerStatus, ServerStats } from '../../../shared/models';
 import { LogsViewerComponent } from '../components/logs-viewer/logs-viewer.component';
 import { CommandConsoleComponent } from '../components/command-console/command-console.component';
+import { ChatViewerComponent } from '../components/chat-viewer/chat-viewer.component';
 
 @Component({
   selector: 'app-server-detail',
@@ -72,14 +73,15 @@ import { CommandConsoleComponent } from '../components/command-console/command-c
     IonList,
     IonButtons,
     LogsViewerComponent,
-    CommandConsoleComponent
+    CommandConsoleComponent,
+    ChatViewerComponent
   ]
 })
 export class ServerDetailPage implements OnInit, OnDestroy {
   server: Server | null = null;
+  activeTab: 'overview' | 'control' | 'logs' | 'chat' | 'config' = 'overview';
   serverStatus: ServerStatus | null = null;
   serverStats: ServerStats | null = null;
-  activeTab: 'overview' | 'control' | 'config' | 'logs' = 'overview';
   loading = true;
 
   constructor(
@@ -167,8 +169,8 @@ export class ServerDetailPage implements OnInit, OnDestroy {
 
   onTabChange(event: any): void {
     const value = event.detail.value;
-    if (value === 'overview' || value === 'control' || value === 'config' || value === 'logs') {
-      this.activeTab = value;
+    if (value === 'overview' || value === 'control' || value === 'config' || value === 'logs' || value === 'chat') {
+      this.activeTab = value as 'overview' | 'control' | 'logs' | 'chat' | 'config';
     }
   }
 

@@ -53,6 +53,10 @@ export const routes: Routes = [
         loadComponent: () => import('./features/backups/backup-list/backup-list.page').then(m => m.BackupListPage),
       },
       {
+        path: 'whitelist',
+        loadComponent: () => import('./features/servers/whitelist/whitelist.page').then(m => m.WhitelistPage),
+      },
+      {
         path: 'settings',
         loadComponent: () => import('./features/settings/settings/settings.page').then(m => m.SettingsPage),
       },

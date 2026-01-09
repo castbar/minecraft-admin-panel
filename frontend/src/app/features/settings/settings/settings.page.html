@@ -28,6 +28,10 @@
       </ion-card-header>
       <ion-card-content>
         <ion-list>
+          <!-- Información Básica -->
+          <ion-item-divider>
+            <ion-label>Información Básica</ion-label>
+          </ion-item-divider>
           <ion-item>
             <ion-label position="stacked">Nombre</ion-label>
             <ion-input [(ngModel)]="serverSettings.name"></ion-input>
@@ -37,13 +41,71 @@
             <ion-input [(ngModel)]="serverSettings.host"></ion-input>
           </ion-item>
           <ion-item>
-            <ion-label position="stacked">Puerto</ion-label>
-            <ion-input type="number" [(ngModel)]="serverSettings.port"></ion-input>
+            <ion-label position="stacked">Puerto del Servidor</ion-label>
+            <ion-input type="number" [(ngModel)]="serverSettings.server_port"></ion-input>
           </ion-item>
+          
+          <!-- Tipo de Servidor y Versión -->
+          <ion-item-divider>
+            <ion-label>Tipo de Servidor y Versión</ion-label>
+          </ion-item-divider>
+          <ion-item>
+            <ion-label>Tipo de Servidor</ion-label>
+            <ion-select [(ngModel)]="serverSettings.server_type" interface="popover">
+              <ion-select-option value="vanilla">Vanilla (Oficial)</ion-select-option>
+              <ion-select-option value="paper">Paper</ion-select-option>
+              <ion-select-option value="spigot">Spigot</ion-select-option>
+              <ion-select-option value="bukkit">Bukkit</ion-select-option>
+              <ion-select-option value="fabric">Fabric</ion-select-option>
+              <ion-select-option value="forge">Forge</ion-select-option>
+            </ion-select>
+          </ion-item>
+          <ion-item>
+            <ion-label>Versión de Minecraft</ion-label>
+            <ion-select [(ngModel)]="serverSettings.minecraft_version" interface="popover">
+              <ion-select-option [value]="latestVersion?.version || 'latest'">
+                {{ latestVersion?.display_name || 'Última Versión' }}
+              </ion-select-option>
+              <ion-select-option *ngFor="let version of versions" [value]="version.version">
+                {{ version.display_name }}
+              </ion-select-option>
+              <ion-select-option value="latest">latest (automático)</ion-select-option>
+            </ion-select>
+          </ion-item>
+          
+          <!-- Configuración de Jugadores -->
+          <ion-item-divider>
+            <ion-label>Configuración de Jugadores</ion-label>
+          </ion-item-divider>
           <ion-item>
             <ion-label position="stacked">Max Jugadores</ion-label>
             <ion-input type="number" [(ngModel)]="serverSettings.max_players"></ion-input>
           </ion-item>
+          <ion-item>
+            <ion-label position="stacked">MOTD (Mensaje del Día)</ion-label>
+            <ion-input [(ngModel)]="serverSettings.motd"></ion-input>
+          </ion-item>
+          <ion-item>
+            <ion-label>Modo Online</ion-label>
+            <ion-toggle [(ngModel)]="serverSettings.online_mode"></ion-toggle>
+          </ion-item>
+          <ion-item>
+            <ion-label>Whitelist Habilitada</ion-label>
+            <ion-toggle [(ngModel)]="serverSettings.enable_whitelist"></ion-toggle>
+          </ion-item>
+          <ion-item>
+            <ion-label>Forzar Whitelist</ion-label>
+            <ion-toggle [(ngModel)]="serverSettings.enforce_whitelist"></ion-toggle>
+          </ion-item>
+          <ion-item>
+            <ion-label position="stacked">Timeout de Inactividad (segundos)</ion-label>
+            <ion-input type="number" [(ngModel)]="serverSettings.player_idle_timeout"></ion-input>
+          </ion-item>
+          
+          <!-- Mundo y Dificultad -->
+          <ion-item-divider>
+            <ion-label>Mundo y Dificultad</ion-label>
+          </ion-item-divider>
           <ion-item>
             <ion-label>Dificultad</ion-label>
             <ion-select [(ngModel)]="serverSettings.difficulty">
@@ -54,15 +116,138 @@
             </ion-select>
           </ion-item>
           <ion-item>
-            <ion-label>PvP Habilitado</ion-label>
-            <ion-toggle [(ngModel)]="serverSettings.pvp_enabled"></ion-toggle>
+            <ion-label>Modo de Juego</ion-label>
+            <ion-select [(ngModel)]="serverSettings.gamemode">
+              <ion-select-option value="survival">Supervivencia</ion-select-option>
+              <ion-select-option value="creative">Creativo</ion-select-option>
+              <ion-select-option value="adventure">Aventura</ion-select-option>
+              <ion-select-option value="spectator">Espectador</ion-select-option>
+            </ion-select>
           </ion-item>
           <ion-item>
-            <ion-label>Whitelist Habilitada</ion-label>
-            <ion-toggle [(ngModel)]="serverSettings.whitelist_enabled"></ion-toggle>
+            <ion-label>Forzar Modo de Juego</ion-label>
+            <ion-toggle [(ngModel)]="serverSettings.force_gamemode"></ion-toggle>
+          </ion-item>
+          <ion-item>
+            <ion-label>Modo Hardcore</ion-label>
+            <ion-toggle [(ngModel)]="serverSettings.hardcore"></ion-toggle>
+          </ion-item>
+          <ion-item>
+            <ion-label>Generar Estructuras</ion-label>
+            <ion-toggle [(ngModel)]="serverSettings.generate_structures"></ion-toggle>
+          </ion-item>
+          <ion-item>
+            <ion-label>Permitir Nether</ion-label>
+            <ion-toggle [(ngModel)]="serverSettings.allow_nether"></ion-toggle>
+          </ion-item>
+          <ion-item>
+            <ion-label position="stacked">Tamaño Máximo del Mundo</ion-label>
+            <ion-input type="number" [(ngModel)]="serverSettings.max_world_size"></ion-input>
+          </ion-item>
+          
+          <!-- Rendimiento y Distancias -->
+          <ion-item-divider>
+            <ion-label>Rendimiento y Distancias</ion-label>
+          </ion-item-divider>
+          <ion-item>
+            <ion-label position="stacked">Distancia de Vista</ion-label>
+            <ion-input type="number" [(ngModel)]="serverSettings.view_distance"></ion-input>
+          </ion-item>
+          <ion-item>
+            <ion-label position="stacked">Distancia de Simulación</ion-label>
+            <ion-input type="number" [(ngModel)]="serverSettings.simulation_distance"></ion-input>
+          </ion-item>
+          <ion-item>
+            <ion-label position="stacked">Protección de Spawn</ion-label>
+            <ion-input type="number" [(ngModel)]="serverSettings.spawn_protection"></ion-input>
+          </ion-item>
+          <ion-item>
+            <ion-label position="stacked">Tiempo Máximo de Tick (ms)</ion-label>
+            <ion-input type="number" [(ngModel)]="serverSettings.max_tick_time"></ion-input>
+          </ion-item>
+          <ion-item>
+            <ion-label position="stacked">Umbral de Compresión de Red</ion-label>
+            <ion-input type="number" [(ngModel)]="serverSettings.network_compression_threshold"></ion-input>
+          </ion-item>
+          <ion-item>
+            <ion-label position="stacked">Límite de Tasa</ion-label>
+            <ion-input type="number" [(ngModel)]="serverSettings.rate_limit"></ion-input>
+          </ion-item>
+          
+          <!-- Combate y PvP -->
+          <ion-item-divider>
+            <ion-label>Combate y PvP</ion-label>
+          </ion-item-divider>
+          <ion-item>
+            <ion-label>PvP Habilitado</ion-label>
+            <ion-toggle [(ngModel)]="serverSettings.pvp"></ion-toggle>
+          </ion-item>
+          
+          <!-- Entidades -->
+          <ion-item-divider>
+            <ion-label>Generación de Entidades</ion-label>
+          </ion-item-divider>
+          <ion-item>
+            <ion-label>Generar Monstruos</ion-label>
+            <ion-toggle [(ngModel)]="serverSettings.spawn_monsters"></ion-toggle>
+          </ion-item>
+          <ion-item>
+            <ion-label>Generar Animales</ion-label>
+            <ion-toggle [(ngModel)]="serverSettings.spawn_animals"></ion-toggle>
+          </ion-item>
+          <ion-item>
+            <ion-label>Generar NPCs</ion-label>
+            <ion-toggle [(ngModel)]="serverSettings.spawn_npcs"></ion-toggle>
+          </ion-item>
+          
+          <!-- Permisos y Comandos -->
+          <ion-item-divider>
+            <ion-label>Permisos y Comandos</ion-label>
+          </ion-item-divider>
+          <ion-item>
+            <ion-label>Permitir Vuelo</ion-label>
+            <ion-toggle [(ngModel)]="serverSettings.allow_flight"></ion-toggle>
+          </ion-item>
+          <ion-item>
+            <ion-label>Bloques de Comando</ion-label>
+            <ion-toggle [(ngModel)]="serverSettings.enable_command_block"></ion-toggle>
+          </ion-item>
+          <ion-item>
+            <ion-label position="stacked">Nivel de Permisos de OP</ion-label>
+            <ion-input type="number" [(ngModel)]="serverSettings.op_permission_level"></ion-input>
+          </ion-item>
+          <ion-item>
+            <ion-label position="stacked">Nivel de Permisos de Funciones</ion-label>
+            <ion-input type="number" [(ngModel)]="serverSettings.function_permission_level"></ion-input>
+          </ion-item>
+          
+          <!-- Seguridad -->
+          <ion-item-divider>
+            <ion-label>Seguridad</ion-label>
+          </ion-item-divider>
+          <ion-item>
+            <ion-label>Forzar Perfil Seguro</ion-label>
+            <ion-toggle [(ngModel)]="serverSettings.enforce_secure_profile"></ion-toggle>
+          </ion-item>
+          <ion-item>
+            <ion-label>Registrar IPs</ion-label>
+            <ion-toggle [(ngModel)]="serverSettings.log_ips"></ion-toggle>
+          </ion-item>
+          
+          <!-- Recursos -->
+          <ion-item-divider>
+            <ion-label>Paquete de Recursos</ion-label>
+          </ion-item-divider>
+          <ion-item>
+            <ion-label position="stacked">URL del Paquete de Recursos</ion-label>
+            <ion-input [(ngModel)]="serverSettings.resource_pack"></ion-input>
+          </ion-item>
+          <ion-item>
+            <ion-label position="stacked">Mensaje del Paquete de Recursos</ion-label>
+            <ion-input [(ngModel)]="serverSettings.resource_pack_prompt"></ion-input>
           </ion-item>
         </ion-list>
-        <ion-button expand="block" (click)="saveServerSettings()" class="ion-margin-top">
+        <ion-button expand="block" (click)="saveServerSettings()" class="ion-margin-top" [disabled]="!serverSettings">
           Guardar Cambios
         </ion-button>
       </ion-card-content>

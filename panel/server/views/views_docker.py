@@ -97,7 +97,7 @@ def create_server(request):
         if java_heap_max_mb >= memory_limit_mb:
             java_heap_max_mb = memory_limit_mb - 200
         
-        # Crear registro en la base de datos (sin crear contenedor Docker)
+        # Crear registro en la base de datos
         server = Server.objects.create(
             name=data['name'],
             host=data['host'],
@@ -142,7 +142,22 @@ def create_server(request):
             role='admin'
         )
         
-        send_notification(server, 'server_created', f"Servidor '{server.name}' creado correctamente")
+        # Crear contenedor Docker automáticamente
+        container_result = None
+        try:
+            from ..utils.docker_control import create_minecraft_container
+            container_result = create_minecraft_container(server)
+            if not container_result.get('success'):
+                # Si falla la creación del contenedor, registrar el error pero no fallar la creación del servidor
+                print(f"⚠️ Error al crear contenedor para servidor {server.name}: {container_result.get('error')}")
+                send_notification(server, 'server_created_with_warning', 
+                                f"Servidor '{server.name}' creado pero el contenedor no se pudo crear: {container_result.get('error')}")
+            else:
+                send_notification(server, 'server_created', f"Servidor '{server.name}' creado correctamente")
+        except Exception as e:
+            print(f"⚠️ Excepción al crear contenedor: {e}")
+            send_notification(server, 'server_created_with_warning', 
+                            f"Servidor '{server.name}' creado pero hubo un problema al crear el contenedor: {str(e)}")
         
         # Retornar información completa del servidor creado (mantener server_id para compatibilidad)
         return JsonResponse({

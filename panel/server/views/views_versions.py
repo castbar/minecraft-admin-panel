@@ -89,11 +89,20 @@ def latest_version(request):
         server_type = request.GET.get('server_type')
         latest = MinecraftVersion.get_latest_version(server_type)
         
+        # Si no hay versiones en la BD, devolver una versión por defecto
         if not latest:
             return JsonResponse({
-                'success': False,
-                'error': 'No version available'
-            }, status=404)
+                'success': True,
+                'data': {
+                    'version': '1.21.1',
+                    'display_name': '1.21.1 - Latest',
+                    'is_latest': True,
+                    'is_stable': True,
+                    'server_types': ['vanilla', 'fabric', 'forge', 'paper', 'spigot', 'bukkit'],
+                    'release_date': None,
+                    'notes': 'Versión por defecto (no hay versiones en la base de datos)',
+                }
+            })
         
         return JsonResponse({
             'success': True,

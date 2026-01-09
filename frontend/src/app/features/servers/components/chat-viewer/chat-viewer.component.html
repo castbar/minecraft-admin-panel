@@ -1,0 +1,53 @@
+<div class="chat-viewer">
+  <div class="chat-header">
+    <h3>Chat del Servidor</h3>
+    <div class="chat-actions">
+      <ion-button 
+        size="small" 
+        fill="clear"
+        (click)="toggleAutoRefresh()">
+        <ion-icon [name]="autoRefresh ? 'pause-outline' : 'play-outline'"></ion-icon>
+        {{ autoRefresh ? 'Pausar' : 'Reanudar' }}
+      </ion-button>
+      <ion-button 
+        size="small" 
+        fill="clear"
+        (click)="loadChat()">
+        <ion-icon name="refresh-outline"></ion-icon>
+        Actualizar
+      </ion-button>
+      <ion-button 
+        size="small" 
+        fill="clear"
+        color="danger"
+        (click)="clearChat()">
+        <ion-icon name="trash-outline"></ion-icon>
+        Limpiar
+      </ion-button>
+    </div>
+  </div>
+
+  <div class="chat-content" *ngIf="!isLoading; else loading">
+    <div class="chat-container" #chatContainer>
+      <div 
+        *ngFor="let msg of chatMessages; trackBy: trackByMessage" 
+        class="chat-message"
+        [class.server-message]="msg.player === 'Server'">
+        <span class="chat-timestamp">[{{ msg.timestamp }}]</span>
+        <span class="chat-player" *ngIf="msg.player !== 'Server'">&lt;{{ msg.player }}&gt;</span>
+        <span class="chat-text">{{ msg.message }}</span>
+      </div>
+      <div *ngIf="chatMessages.length === 0" class="no-chat">
+        No hay mensajes de chat disponibles
+      </div>
+    </div>
+  </div>
+
+  <ng-template #loading>
+    <div class="chat-loading">
+      <ion-spinner></ion-spinner>
+      <p>Cargando chat...</p>
+    </div>
+  </ng-template>
+</div>
+

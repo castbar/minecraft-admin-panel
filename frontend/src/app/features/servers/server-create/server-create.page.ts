@@ -103,7 +103,7 @@ export class ServerCreatePage {
       forge: { memory_limit_mb: 4096, java_heap_max_mb: 3584, java_heap_min_mb: 1024 }
     };
 
-    this.recommendedMemory = recommendations[this.serverData.server_type] || recommendations.vanilla;
+    this.recommendedMemory = recommendations[this.serverData.server_type] || recommendations['vanilla'];
     
     // Si no hay memoria configurada, usar recomendada
     if (!this.serverData.memory_limit_mb) {
@@ -194,70 +194,82 @@ export class ServerCreatePage {
   }
 
   isFormValid(): boolean {
-    return !!(this.serverData.name && this.serverData.host && this.serverData.rcon_port && this.serverData.rcon_password);
+    const isValid = !!(this.serverData.name && this.serverData.host && this.serverData.rcon_port && this.serverData.rcon_password);
+    console.log('isFormValid:', isValid, this.serverData);
+    return isValid;
   }
 
   async createServer(): Promise<void> {
-    // Validación mejorada con mensajes específicos
-    if (!this.serverData.name) {
-      this.toast.error('❌ El nombre del servidor es requerido');
-      return;
-    }
-
-    if (!this.serverData.host) {
-      this.toast.error('❌ El host es requerido (IP o nombre del contenedor)');
-      return;
-    }
-
-    if (!this.serverData.rcon_port || this.serverData.rcon_port < 1 || this.serverData.rcon_port > 65535) {
-      this.toast.error('❌ El puerto RCON debe estar entre 1 y 65535');
-      return;
-    }
-
-    if (!this.serverData.rcon_password) {
-      this.toast.error('❌ La contraseña RCON es requerida');
-      return;
-    }
-
-    // Validar memoria si está configurada
-    if (this.serverData.memory_limit_mb && this.serverData.java_heap_max_mb) {
-      if (this.serverData.java_heap_max_mb >= this.serverData.memory_limit_mb) {
-        this.toast.error('❌ El heap máximo debe ser menor que la memoria total (deja 200MB para el sistema)');
+    try {
+      console.log('createServer called!', this.serverData);
+      
+      // Validación mejorada con mensajes específicos
+      if (!this.serverData.name) {
+        console.error('Validation failed: name is required');
+        alert('❌ El nombre del servidor es requerido');
         return;
       }
-    }
 
-    const loading = await this.loadingController.create({
-      message: 'Creando servidor...',
-      duration: 0 // No se cierra automáticamente
-    });
-    await loading.present();
-
-    this.serverService.createServer(this.serverData).subscribe({
-      next: (response) => {
-        loading.dismiss();
-        this.toast.success(`✅ Servidor "${this.serverData.name}" creado correctamente`);
-        this.authService.setCurrentServerId(response.data.id);
-        this.router.navigate(['/dashboard']);
-      },
-      error: (error) => {
-        loading.dismiss();
-        // Mensajes de error más amigables
-        let errorMessage = 'Error al crear servidor';
-        
-        if (error.error?.error) {
-          errorMessage = error.error.error;
-        } else if (error.status === 400) {
-          errorMessage = '❌ Datos inválidos. Verifica que todos los campos sean correctos.';
-        } else if (error.status === 403) {
-          errorMessage = '❌ No tienes permisos para crear servidores';
-        } else if (error.status === 500) {
-          errorMessage = '❌ Error del servidor. Intenta de nuevo o contacta al administrador.';
-        }
-        
-        this.toast.error(errorMessage);
+      if (!this.serverData.host) {
+        console.error('Validation failed: host is required');
+        alert('❌ El host es requerido (IP o nombre del contenedor)');
+        return;
       }
-    });
+
+      if (!this.serverData.rcon_port || this.serverData.rcon_port < 1 || this.serverData.rcon_port > 65535) {
+        console.error('Validation failed: rcon_port is invalid');
+        alert('❌ El puerto RCON debe estar entre 1 y 65535');
+        return;
+      }
+
+      if (!this.serverData.rcon_password) {
+        console.error('Validation failed: rcon_password is required');
+        alert('❌ La contraseña RCON es requerida');
+        return;
+      }
+
+      // Validar memoria si está configurada
+      if (this.serverData.memory_limit_mb && this.serverData.java_heap_max_mb) {
+        if (this.serverData.java_heap_max_mb >= this.serverData.memory_limit_mb) {
+          console.error('Validation failed: heap >= memory');
+          alert('❌ El heap máximo debe ser menor que la memoria total (deja 200MB para el sistema)');
+          return;
+        }
+      }
+
+      console.log('Validation passed, calling serverService.createServer...');
+
+      this.serverService.createServer(this.serverData).subscribe({
+        next: (response: any) => {
+          console.log('Server created successfully!', response);
+          const serverId = response.server_id || response.data?.id || response.id || 1;
+          alert(`✅ Servidor "${this.serverData.name}" creado correctamente con ID: ${serverId}`);
+          this.authService.setCurrentServerId(serverId);
+          this.router.navigate(['/dashboard']);
+        },
+        error: (error) => {
+          console.error('Error creating server:', error);
+          // Mensajes de error más amigables
+          let errorMessage = 'Error al crear servidor';
+          
+          if (error.error?.error) {
+            errorMessage = error.error.error;
+          } else if (error.status === 400) {
+            errorMessage = '❌ Datos inválidos. Verifica que todos los campos sean correctos.';
+          } else if (error.status === 403) {
+            errorMessage = '❌ No tienes permisos para crear servidores';
+          } else if (error.status === 500) {
+            errorMessage = '❌ Error del servidor. Intenta de nuevo o contacta al administrador.';
+          }
+          
+          alert(errorMessage);
+        }
+      });
+      console.log('Subscribe set up, waiting for response...');
+    } catch (error) {
+      console.error('Exception in createServer:', error);
+      alert('Error inesperado: ' + error);
+    }
   }
 }
 

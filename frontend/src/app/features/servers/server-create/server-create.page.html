@@ -13,11 +13,19 @@
       <ion-list>
         <ion-item>
           <ion-label position="stacked">Nombre *</ion-label>
-          <ion-input [(ngModel)]="serverData.name" placeholder="Mi Servidor"></ion-input>
+          <ion-input 
+            [(ngModel)]="serverData.name" 
+            placeholder="Mi Servidor"
+            (ionInput)="serverData.name = $any($event.target).value">
+          </ion-input>
         </ion-item>
         <ion-item>
           <ion-label position="stacked">Host *</ion-label>
-          <ion-input [(ngModel)]="serverData.host" placeholder="localhost o IP"></ion-input>
+          <ion-input 
+            [(ngModel)]="serverData.host" 
+            placeholder="localhost o IP"
+            (ionInput)="serverData.host = $any($event.target).value">
+          </ion-input>
         </ion-item>
         <ion-item>
           <ion-label position="stacked">Puerto</ion-label>
@@ -28,8 +36,12 @@
           <ion-input type="number" [(ngModel)]="serverData.rcon_port"></ion-input>
         </ion-item>
         <ion-item>
-          <ion-label position="stacked">Contraseña RCON</ion-label>
-          <ion-input type="password" [(ngModel)]="serverData.rcon_password"></ion-input>
+          <ion-label position="stacked">Contraseña RCON *</ion-label>
+          <ion-input 
+            type="password" 
+            [(ngModel)]="serverData.rcon_password"
+            (ionInput)="serverData.rcon_password = $any($event.target).value">
+          </ion-input>
         </ion-item>
         <ion-item>
           <ion-label>Tipo de Servidor</ion-label>
@@ -132,11 +144,11 @@
           </ion-note>
         </ion-item>
       </ion-list>
-      <ion-button expand="block" (click)="createServer()" class="ion-margin-top" [disabled]="!isFormValid()">
+      <ion-button expand="block" (click)="createServer()" class="ion-margin-top">
         Crear Servidor
       </ion-button>
-      <ion-note *ngIf="!isFormValid()" color="warning" style="display: block; text-align: center; margin-top: 10px;">
-        ⚠️ Completa los campos requeridos
+      <ion-note color="primary" style="display: block; text-align: center; margin-top: 10px;">
+        Debug: name={{ serverData.name }}, host={{ serverData.host }}, valid={{ isFormValid() }}
       </ion-note>
     </ion-card-content>
   </ion-card>

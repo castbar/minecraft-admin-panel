@@ -1,4 +1,4 @@
-import { Component, Input, OnInit, OnDestroy } from '@angular/core';
+import { Component, Input, OnInit, OnDestroy, ViewChild, ElementRef, AfterViewChecked } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { IonicModule } from '@ionic/angular';
 import { LogsService } from '../../services/logs.service';
@@ -15,16 +15,19 @@ import { of } from 'rxjs';
   templateUrl: './logs-viewer.component.html',
   styleUrls: ['./logs-viewer.component.scss']
 })
-export class LogsViewerComponent implements OnInit, OnDestroy {
+export class LogsViewerComponent implements OnInit, OnDestroy, AfterViewChecked {
   @Input() serverId!: number;
   @Input() autoRefresh: boolean = true;
   @Input() refreshInterval: number = 2000; // 2 segundos
   @Input() maxLines: number = 100;
+  @ViewChild('logsContainer', { static: false }) logsContainer?: ElementRef<HTMLDivElement>;
 
   logs: string[] = [];
   filteredLogs: string[] = []; // Logs sin mensajes de chat
   isLoading = false;
   private subscription?: Subscription;
+  private shouldScrollToBottom = false;
+  private previousLogsLength = 0;
 
   constructor(
     private logsService: LogsService,
@@ -58,9 +61,14 @@ export class LogsViewerComponent implements OnInit, OnDestroy {
       })
     ).subscribe({
       next: (response: any) => {
-        this.logs = response.data || response || [];
+        const newLogs = response.data || response || [];
+        const hadNewLogs = newLogs.length > this.logs.length;
+        this.logs = newLogs;
         this.filterNonChatLogs();
         this.isLoading = false;
+        if (hadNewLogs) {
+          setTimeout(() => this.scrollToBottom(), 100);
+        }
       },
       error: () => {
         this.isLoading = false;
@@ -78,8 +86,13 @@ export class LogsViewerComponent implements OnInit, OnDestroy {
       ))
     ).subscribe({
       next: (response: any) => {
-        this.logs = response.data || response || [];
+        const newLogs = response.data || response || [];
+        const hadNewLogs = newLogs.length > this.logs.length;
+        this.logs = newLogs;
         this.filterNonChatLogs();
+        if (hadNewLogs && this.autoRefresh) {
+          setTimeout(() => this.scrollToBottom(), 100);
+        }
       }
     });
   }
@@ -93,10 +106,30 @@ export class LogsViewerComponent implements OnInit, OnDestroy {
       /\[INFO\]: <[^>]+>/,
     ];
 
+    const oldLength = this.filteredLogs.length;
     this.filteredLogs = this.logs.filter(log => {
       // Excluir líneas que coincidan con patrones de chat
       return !chatPatterns.some(pattern => pattern.test(log));
     });
+    
+    // Si hay nuevos logs, activar scroll automático
+    if (this.filteredLogs.length > oldLength) {
+      this.shouldScrollToBottom = true;
+    }
+  }
+
+  ngAfterViewChecked(): void {
+    if (this.shouldScrollToBottom && this.logsContainer) {
+      this.scrollToBottom();
+      this.shouldScrollToBottom = false;
+    }
+  }
+
+  scrollToBottom(): void {
+    if (this.logsContainer) {
+      const element = this.logsContainer.nativeElement;
+      element.scrollTop = element.scrollHeight;
+    }
   }
 
   stopAutoRefresh(): void {

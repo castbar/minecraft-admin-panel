@@ -73,82 +73,101 @@ def mods_list(request, server_id=None):
             else:
                 install_path = mods_path
             
-            # Verificar que el contenedor esté corriendo
-            if container.status != 'running':
-                return JsonResponse({'success': True, 'data': [], 'message': f'Container is not running (status: {container.status})'})
-            
-            # Crear directorio si no existe
-            container.exec_run(f'mkdir -p {install_path}', user='minecraft')
-            
-            # Listar archivos en el contenedor - usar sh -c para que funcionen redirecciones
-            # Intentar primero con el usuario minecraft, si falla intentar con root
-            result = container.exec_run(f'sh -c "ls -1 {install_path} 2>/dev/null || echo \\"\\""', user='minecraft')
-            if result.exit_code != 0:
-                # Si falla con minecraft, intentar con root
-                result = container.exec_run(f'sh -c "ls -1 {install_path} 2>/dev/null || echo \\"\\""', user='root')
-            
-            files_str = result.output.decode('utf-8').strip()
-            
-            # Filtrar solo archivos .jar y limpiar líneas vacías
-            files = [f.strip() for f in files_str.split('\n') if f.strip() and f.strip().endswith('.jar')] if files_str else []
-            
-            mods = []
-            for file in files:
-                # Obtener tamaño del archivo
-                size_result = container.exec_run(f'stat -c%s {install_path}/{file}', user='minecraft')
-                size = 0
+            # Intentar leer desde el contenedor si está corriendo
+            if container.status == 'running':
                 try:
-                    if size_result.exit_code == 0:
-                        size_str = size_result.output.decode('utf-8').strip()
-                        if size_str and size_str.isdigit():
-                            size = int(size_str)
-                    else:
-                        # Intentar con root si falla con minecraft
-                        size_result = container.exec_run(f'stat -c%s {install_path}/{file}', user='root')
-                        if size_result.exit_code == 0:
-                            size_str = size_result.output.decode('utf-8').strip()
-                            if size_str and size_str.isdigit():
-                                size = int(size_str)
-                except Exception:
-                    size = 0
-                
-                # Buscar en pool de mods - búsqueda exacta del nombre (ignorando extensión)
-                # Limpiar solo la extensión .jar o .disabled
-                clean_name = file.replace('.jar', '').replace('.disabled', '').strip()
-                
-                # Búsqueda exacta (case-insensitive)
-                mod_pool = ModPool.objects.filter(name__iexact=clean_name).first()
-                
-                mod_info = {
-                    'name': file,
-                    'enabled': True,
-                    'size': size,
-                    'size_mb': round(size / (1024 * 1024), 2) if size > 0 else 0,
-                    'path': 'mods' if server.server_type not in ['bukkit', 'spigot', 'paper'] else 'plugins',
-                    'has_config': False,
-                    'file_path': f'{install_path}/{file}',
-                }
-                
-                # Agregar información del pool si existe
-                if mod_pool:
-                    mod_info['pool_info'] = {
-                        'id': mod_pool.id,
-                        'display_name': mod_pool.display_name,
-                        'mod_type': mod_pool.mod_type,
-                        'category': mod_pool.category,
-                        'has_config': bool(mod_pool.config_file_path),
-                        'config_file_path': mod_pool.config_file_path,
-                        'config_format': mod_pool.config_format,
-                    }
-                    mod_info['has_config'] = bool(mod_pool.config_file_path)
-                
-                mods.append(mod_info)
+                    # Crear directorio si no existe
+                    container.exec_run(f'mkdir -p {install_path}', user='minecraft')
+                    
+                    # Listar archivos en el contenedor - usar sh -c para que funcionen redirecciones
+                    # Intentar primero con el usuario minecraft, si falla intentar con root
+                    result = container.exec_run(f'sh -c "ls -1 {install_path} 2>/dev/null || echo \\"\\""', user='minecraft')
+                    if result.exit_code != 0:
+                        # Si falla con minecraft, intentar con root
+                        result = container.exec_run(f'sh -c "ls -1 {install_path} 2>/dev/null || echo \\"\\""', user='root')
+                    
+                    files_str = result.output.decode('utf-8').strip()
+                    
+                    # Filtrar solo archivos .jar y limpiar líneas vacías
+                    files = [f.strip() for f in files_str.split('\n') if f.strip() and f.strip().endswith('.jar')] if files_str else []
+                    
+                    mods = []
+                    for file in files:
+                        # Obtener tamaño del archivo
+                        size_result = container.exec_run(f'stat -c%s {install_path}/{file}', user='minecraft')
+                        size = 0
+                        try:
+                            if size_result.exit_code == 0:
+                                size_str = size_result.output.decode('utf-8').strip()
+                                if size_str and size_str.isdigit():
+                                    size = int(size_str)
+                            else:
+                                # Intentar con root si falla con minecraft
+                                size_result = container.exec_run(f'stat -c%s {install_path}/{file}', user='root')
+                                if size_result.exit_code == 0:
+                                    size_str = size_result.output.decode('utf-8').strip()
+                                    if size_str and size_str.isdigit():
+                                        size = int(size_str)
+                        except Exception:
+                            size = 0
+                        
+                        # Buscar en pool de mods - búsqueda exacta del nombre (ignorando extensión)
+                        # Limpiar solo la extensión .jar o .disabled
+                        clean_name = file.replace('.jar', '').replace('.disabled', '').strip()
+                        
+                        # Búsqueda exacta (case-insensitive)
+                        # Usar .only() para evitar campos que puedan no existir en la BD
+                        try:
+                            mod_pool = ModPool.objects.only(
+                                'id', 'name', 'display_name', 'mod_type', 'category',
+                                'config_file_path', 'config_format'
+                            ).filter(name__iexact=clean_name).first()
+                        except Exception:
+                            # Si falla, intentar sin .only() como fallback
+                            mod_pool = None
+                        
+                        mod_info = {
+                            'name': file,
+                            'enabled': True,
+                            'size': size,
+                            'size_mb': round(size / (1024 * 1024), 2) if size > 0 else 0,
+                            'path': 'mods' if server.server_type not in ['bukkit', 'spigot', 'paper'] else 'plugins',
+                            'has_config': False,
+                            'file_path': f'{install_path}/{file}',
+                        }
+                        
+                        # Agregar información del pool si existe
+                        if mod_pool:
+                            mod_info['pool_info'] = {
+                                'id': mod_pool.id,
+                                'display_name': mod_pool.display_name,
+                                'mod_type': mod_pool.mod_type,
+                                'category': mod_pool.category,
+                                'has_config': bool(mod_pool.config_file_path),
+                                'config_file_path': mod_pool.config_file_path,
+                                'config_format': mod_pool.config_format,
+                            }
+                            mod_info['has_config'] = bool(mod_pool.config_file_path)
+                        
+                        mods.append(mod_info)
+                    
+                    # Si encontramos mods en el contenedor, retornarlos
+                    if mods:
+                        return JsonResponse({'success': True, 'data': mods})
+                    # Si no encontramos mods pero el contenedor está corriendo, continuar con fallback
+                except Exception as e:
+                    # Si hay error leyendo del contenedor, continuar con fallback
+                    print(f"Error leyendo mods del contenedor: {e}")
+                    pass
             
-            return JsonResponse({'success': True, 'data': mods})
+            # Si el contenedor no está corriendo o no se encontraron mods, usar fallback al filesystem
+            # (Los volúmenes Docker están montados en el host, así que podemos leerlos directamente)
         except docker.errors.NotFound:
-            return JsonResponse({'success': True, 'data': [], 'message': 'Container not found'})
-        except Exception:
-            # Continuar con método de filesystem si falla
+            # Contenedor no existe, usar fallback al filesystem
+            pass
+        except Exception as e:
+            # Cualquier otro error, usar fallback al filesystem
+            print(f"Error accediendo al contenedor, usando fallback: {e}")
             pass
     
     # Método original: leer desde filesystem local
@@ -174,7 +193,15 @@ def mods_list(request, server_id=None):
                 size = os.path.getsize(file_path)
                 
                 # Buscar en pool de mods
-                mod_pool = ModPool.objects.filter(name__iexact=file.replace('.jar', '')).first()
+                # Usar .only() para evitar campos que puedan no existir en la BD
+                try:
+                    mod_pool = ModPool.objects.only(
+                        'id', 'name', 'display_name', 'mod_type', 'category',
+                        'config_file_path', 'config_format'
+                    ).filter(name__iexact=file.replace('.jar', '')).first()
+                except Exception:
+                    # Si falla, intentar sin .only() como fallback
+                    mod_pool = None
                 mod_info = {
                     'name': file,
                     'enabled': True,
@@ -208,7 +235,15 @@ def mods_list(request, server_id=None):
                     display_name = file.replace('.disabled', '')
                     size = os.path.getsize(file_path)
                     
-                    mod_pool = ModPool.objects.filter(name__iexact=display_name.replace('.jar', '')).first()
+                    # Usar .only() para evitar campos que puedan no existir en la BD
+                    try:
+                        mod_pool = ModPool.objects.only(
+                            'id', 'name', 'display_name', 'mod_type', 'category',
+                            'config_file_path', 'config_format'
+                        ).filter(name__iexact=display_name.replace('.jar', '')).first()
+                    except Exception:
+                        # Si falla, intentar sin .only() como fallback
+                        mod_pool = None
                     mod_info = {
                         'name': display_name,
                         'enabled': False,
@@ -240,7 +275,15 @@ def mods_list(request, server_id=None):
                     display_name = file.replace('.disabled', '')
                     size = os.path.getsize(file_path)
                     
-                    mod_pool = ModPool.objects.filter(name__iexact=display_name.replace('.jar', '')).first()
+                    # Usar .only() para evitar campos que puedan no existir en la BD
+                    try:
+                        mod_pool = ModPool.objects.only(
+                            'id', 'name', 'display_name', 'mod_type', 'category',
+                            'config_file_path', 'config_format'
+                        ).filter(name__iexact=display_name.replace('.jar', '')).first()
+                    except Exception:
+                        # Si falla, intentar sin .only() como fallback
+                        mod_pool = None
                     mod_info = {
                         'name': display_name,
                         'enabled': False,
@@ -464,94 +507,177 @@ def mod_upload(request, server_id=None):
             return JsonResponse({'success': False, 'error': 'No file provided'}, status=400)
         
         file = request.FILES['mod_file']
-        if not file.name.endswith('.jar'):
-            return JsonResponse({'success': False, 'error': 'Only .jar files allowed'}, status=400)
+        is_zip = file.name.endswith('.zip')
+        is_jar = file.name.endswith('.jar')
         
-        # Validar tamaño (max 200MB)
-        if file.size > 200 * 1024 * 1024:
-            return JsonResponse({'success': False, 'error': 'File too large (max 200MB)'}, status=400)
+        if not (is_jar or is_zip):
+            return JsonResponse({'success': False, 'error': 'Only .jar or .zip files allowed'}, status=400)
         
-        # Si el servidor tiene container_name, guardar en el contenedor del servidor
+        # Validar tamaño (max 500MB para .zip, 200MB para .jar)
+        max_size = 500 * 1024 * 1024 if is_zip else 200 * 1024 * 1024
+        if file.size > max_size:
+            return JsonResponse({'success': False, 'error': f'File too large (max {max_size // (1024*1024)}MB)'}, status=400)
+        
+        # Si el servidor tiene container_name, guardar directamente en el volumen del contenedor
         if server.container_name:
             import docker
+            import tempfile
+            import tarfile
+            import io
+            
             try:
                 client = docker.from_env()
                 container = client.containers.get(server.container_name)
                 
                 mods_path = '/data/mods'
                 
-                # Verificar si el archivo ya existe
-                result = container.exec_run(f'test -f {mods_path}/{file.name} && echo "exists" || echo ""', user='minecraft')
-                if result.output.decode('utf-8').strip() == 'exists':
-                    return JsonResponse({'success': False, 'error': f'Mod {file.name} already exists'}, status=400)
-                
                 # Crear directorio si no existe
                 container.exec_run(f'mkdir -p {mods_path}', user='minecraft')
-                
-                # Guardar archivo temporalmente en el contenedor Django
-                import tempfile
-                import tarfile
-                import io
                 
                 # Leer el contenido del archivo
                 file_content = b''
                 for chunk in file.chunks():
                     file_content += chunk
                 
-                # Crear un tar en memoria
-                tar_stream = io.BytesIO()
-                with tarfile.open(fileobj=tar_stream, mode='w') as tar:
-                    tarinfo = tarfile.TarInfo(name=file.name)
-                    tarinfo.size = len(file_content)
-                    tar.addfile(tarinfo, io.BytesIO(file_content))
+                uploaded_files = []
                 
-                tar_stream.seek(0)
+                if is_zip:
+                    # Procesar archivo ZIP (modpack)
+                    import zipfile
+                    try:
+                        zip_file = zipfile.ZipFile(io.BytesIO(file_content))
+                        jar_files = [f for f in zip_file.namelist() if f.endswith('.jar') and not f.startswith('__MACOSX')]
+                        
+                        if not jar_files:
+                            return JsonResponse({'success': False, 'error': 'No .jar files found in zip'}, status=400)
+                        
+                        # Crear tar con todos los archivos .jar del zip
+                        tar_stream = io.BytesIO()
+                        with tarfile.open(fileobj=tar_stream, mode='w') as tar:
+                            for jar_file in jar_files:
+                                # Obtener solo el nombre del archivo (sin rutas)
+                                jar_name = os.path.basename(jar_file)
+                                
+                                # Verificar si ya existe
+                                result = container.exec_run(f'test -f {mods_path}/{jar_name} && echo "exists" || echo ""', user='minecraft')
+                                if result.output.decode('utf-8').strip() == 'exists':
+                                    continue  # Saltar archivos que ya existen
+                                
+                                jar_content = zip_file.read(jar_file)
+                                tarinfo = tarfile.TarInfo(name=jar_name)
+                                tarinfo.size = len(jar_content)
+                                tar.addfile(tarinfo, io.BytesIO(jar_content))
+                                uploaded_files.append(jar_name)
+                        
+                        if not uploaded_files:
+                            return JsonResponse({'success': False, 'error': 'All mods from zip already exist'}, status=400)
+                        
+                        tar_stream.seek(0)
+                        container.put_archive(mods_path, tar_stream.read())
+                        
+                        # Asegurar permisos correctos para todos los archivos
+                        for jar_name in uploaded_files:
+                            container.exec_run(f'chown minecraft:minecraft {mods_path}/{jar_name}', user='root')
+                        
+                    except zipfile.BadZipFile:
+                        return JsonResponse({'success': False, 'error': 'Invalid zip file'}, status=400)
+                else:
+                    # Procesar archivo .jar individual
+                    jar_name = file.name
+                    
+                    # Verificar si el archivo ya existe
+                    result = container.exec_run(f'test -f {mods_path}/{jar_name} && echo "exists" || echo ""', user='minecraft')
+                    if result.output.decode('utf-8').strip() == 'exists':
+                        return JsonResponse({'success': False, 'error': f'Mod {jar_name} already exists'}, status=400)
+                    
+                    # Crear un tar en memoria
+                    tar_stream = io.BytesIO()
+                    with tarfile.open(fileobj=tar_stream, mode='w') as tar:
+                        tarinfo = tarfile.TarInfo(name=jar_name)
+                        tarinfo.size = len(file_content)
+                        tar.addfile(tarinfo, io.BytesIO(file_content))
+                    
+                    tar_stream.seek(0)
+                    
+                    # Copiar archivo al contenedor del servidor usando put_archive
+                    container.put_archive(mods_path, tar_stream.read())
+                    
+                    # Asegurar permisos correctos
+                    container.exec_run(f'chown minecraft:minecraft {mods_path}/{jar_name}', user='root')
+                    uploaded_files.append(jar_name)
                 
-                # Copiar archivo al contenedor del servidor usando put_archive
-                container.put_archive(mods_path, tar_stream.read())
-                
-                # Asegurar permisos correctos
-                container.exec_run(f'chown minecraft:minecraft {mods_path}/{file.name}', user='root')
-                
-                return JsonResponse({
-                    'success': True, 
-                    'message': f'Mod {file.name} uploaded successfully',
-                    'data': {
-                        'name': file.name,
-                        'enabled': True,
-                        'size': file.size,
-                        'size_mb': round(file.size / (1024 * 1024), 2)
-                    }
-                })
+            except docker.errors.NotFound:
+                return JsonResponse({'success': False, 'error': f'Container {server.container_name} not found'}, status=404)
             except Exception as e:
                 import traceback
                 traceback.print_exc()
                 return JsonResponse({'success': False, 'error': f'Error uploading to container: {str(e)}'}, status=500)
-        
-        # Método original: guardar en filesystem local
-        mods_path = os.path.join(server.minecraft_data_path, 'mods')
-        os.makedirs(mods_path, exist_ok=True)
-        
-        mod_path = os.path.join(mods_path, file.name)
-        
-        # Si el archivo ya existe, error
-        if os.path.exists(mod_path):
-            return JsonResponse({'success': False, 'error': f'Mod {file.name} already exists'}, status=400)
-        
-        with open(mod_path, 'wb+') as destination:
-            for chunk in file.chunks():
-                destination.write(chunk)
-        
-        return JsonResponse({
-            'success': True, 
-            'message': f'Mod {file.name} uploaded successfully',
-            'data': {
-                'name': file.name,
-                'enabled': True,
-                'size': file.size,
-                'size_mb': round(file.size / (1024 * 1024), 2)
-            }
-        })
+            
+            return JsonResponse({
+                'success': True,
+                'message': f'{"Mods" if is_zip else "Mod"} uploaded successfully',
+                'uploaded_files': uploaded_files,
+                'count': len(uploaded_files)
+            })
+        else:
+            # Método fallback: guardar en el filesystem local (para servidores sin contenedor)
+            import zipfile
+            
+            mods_path = os.path.join(server.minecraft_data_path, 'mods')
+            os.makedirs(mods_path, exist_ok=True)
+            
+            uploaded_files = []
+            
+            if is_zip:
+                # Procesar archivo ZIP
+                try:
+                    zip_file = zipfile.ZipFile(file)
+                    jar_files = [f for f in zip_file.namelist() if f.endswith('.jar') and not f.startswith('__MACOSX')]
+                    
+                    if not jar_files:
+                        return JsonResponse({'success': False, 'error': 'No .jar files found in zip'}, status=400)
+                    
+                    for jar_file in jar_files:
+                        jar_name = os.path.basename(jar_file)
+                        mod_path = os.path.join(mods_path, jar_name)
+                        
+                        if os.path.exists(mod_path):
+                            continue  # Saltar archivos que ya existen
+                        
+                        with open(mod_path, 'wb') as f:
+                            f.write(zip_file.read(jar_file))
+                        uploaded_files.append(jar_name)
+                    
+                    if not uploaded_files:
+                        return JsonResponse({'success': False, 'error': 'All mods from zip already exist'}, status=400)
+                        
+                except zipfile.BadZipFile:
+                    return JsonResponse({'success': False, 'error': 'Invalid zip file'}, status=400)
+            else:
+                # Procesar archivo .jar individual
+                mod_path = os.path.join(mods_path, file.name)
+                
+                if os.path.exists(mod_path):
+                    return JsonResponse({'success': False, 'error': f'Mod {file.name} already exists'}, status=400)
+                
+                # Guardar archivo
+                with open(mod_path, 'wb+') as destination:
+                    for chunk in file.chunks():
+                        destination.write(chunk)
+                uploaded_files.append(file.name)
+            
+            return JsonResponse({
+                'success': True,
+                'message': f'{"Mods" if is_zip else "Mod"} uploaded successfully',
+                'uploaded_files': uploaded_files,
+                'count': len(uploaded_files),
+                'data': {
+                    'name': file.name if not is_zip else f'{len(uploaded_files)} mods',
+                    'enabled': True,
+                    'size': file.size,
+                    'size_mb': round(file.size / (1024 * 1024), 2)
+                }
+            })
     except Exception as e:
         return JsonResponse({'success': False, 'error': str(e)}, status=500)
 

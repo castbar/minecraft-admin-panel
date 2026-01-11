@@ -28,7 +28,7 @@
   </div>
 
   <div class="logs-content" *ngIf="!isLoading; else loading">
-    <div class="logs-container">
+    <div class="logs-container" #logsContainer>
       <div 
         *ngFor="let log of filteredLogs" 
         class="log-line"

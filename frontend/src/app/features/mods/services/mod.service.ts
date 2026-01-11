@@ -59,5 +59,24 @@ export class ModService {
   resetModConfig(serverId: number, modName: string): Observable<any> {
     return this.api.post(`/servers/${serverId}/mods/config/reset/`, { mod_name: modName });
   }
+
+  getConfigFiles(serverId: number, path?: string): Observable<any> {
+    const params: any = {};
+    if (path) {
+      params.path = path;
+    }
+    return this.api.get(`/servers/${serverId}/mods/config/files/`, params);
+  }
+
+  readConfigFile(serverId: number, filePath: string): Observable<any> {
+    return this.api.get(`/servers/${serverId}/mods/config/files/read/`, { file_path: filePath });
+  }
+
+  writeConfigFile(serverId: number, filePath: string, content: string): Observable<any> {
+    return this.api.post(`/servers/${serverId}/mods/config/files/write/`, {
+      file_path: filePath,
+      content
+    });
+  }
 }
 

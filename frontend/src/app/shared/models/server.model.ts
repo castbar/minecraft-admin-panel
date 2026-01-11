@@ -1,3 +1,9 @@
+export interface AdditionalPort {
+  port: number;
+  protocol: 'tcp' | 'udp';
+  host_port: number;
+}
+
 export interface Server {
   id: number;
   name: string;
@@ -29,6 +35,12 @@ export interface Server {
   auth_mode?: 'whitelist' | 'database' | 'both' | 'public';
   online_mode?: boolean;
   minecraft_version?: string;
+  // Propiedades de Docker
+  container_name?: string;
+  memory_limit_mb?: number;
+  java_heap_max_mb?: number;
+  java_heap_min_mb?: number;
+  additional_ports?: AdditionalPort[];
   // Propiedades adicionales de server.properties
   simulation_distance?: number;
   gamemode?: 'survival' | 'creative' | 'adventure' | 'spectator';

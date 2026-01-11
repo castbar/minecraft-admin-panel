@@ -28,12 +28,40 @@
           </ion-input>
         </ion-item>
         <ion-item>
-          <ion-label position="stacked">Puerto</ion-label>
-          <ion-input type="number" [(ngModel)]="serverData.port"></ion-input>
+          <ion-label>
+            <h3>Auto-asignar Puertos</h3>
+            <p>Dejar que el sistema asigne puertos disponibles automáticamente</p>
+          </ion-label>
+          <ion-toggle [(ngModel)]="autoAssignPorts" (ionChange)="onAutoAssignToggle()"></ion-toggle>
         </ion-item>
-        <ion-item>
-          <ion-label position="stacked">Puerto RCON</ion-label>
-          <ion-input type="number" [(ngModel)]="serverData.rcon_port"></ion-input>
+        <ion-item *ngIf="!autoAssignPorts">
+          <ion-label position="stacked">Puerto Minecraft (opcional)</ion-label>
+          <ion-input 
+            type="number" 
+            [(ngModel)]="serverData.port"
+            placeholder="25565 o dejar vacío para auto-asignar"
+            [min]="1"
+            [max]="65535">
+          </ion-input>
+          <ion-note slot="helper">Dejar vacío para auto-asignar</ion-note>
+        </ion-item>
+        <ion-item *ngIf="!autoAssignPorts">
+          <ion-label position="stacked">Puerto RCON (opcional)</ion-label>
+          <ion-input 
+            type="number" 
+            [(ngModel)]="serverData.rcon_port"
+            placeholder="25575 o dejar vacío para auto-asignar"
+            [min]="1"
+            [max]="65535">
+          </ion-input>
+          <ion-note slot="helper">Dejar vacío para auto-asignar</ion-note>
+        </ion-item>
+        <ion-item *ngIf="autoAssignPorts">
+          <ion-label>
+            <p style="color: var(--ion-color-success);">
+              ✅ Los puertos se asignarán automáticamente al crear el servidor
+            </p>
+          </ion-label>
         </ion-item>
         <ion-item>
           <ion-label position="stacked">Contraseña RCON *</ion-label>
@@ -143,13 +171,56 @@
             Máximo: {{ (serverData.memory_limit_mb || 2048) - 200 }}MB (deja 200MB para el sistema)
           </ion-note>
         </ion-item>
+        
+        <!-- Puertos Adicionales -->
+        <ion-item>
+          <ion-label>
+            <h2>Puertos Adicionales</h2>
+            <p>Para mods como Simple Voice Chat (UDP 24454)</p>
+          </ion-label>
+        </ion-item>
+        
+        <ion-item *ngFor="let port of additionalPorts; let i = index" lines="full">
+          <ion-label position="stacked">Puerto {{ i + 1 }}</ion-label>
+          <div style="display: flex; gap: 8px; width: 100%;">
+            <ion-input 
+              type="number" 
+              [(ngModel)]="port.port" 
+              placeholder="24454"
+              style="flex: 1;"
+              [min]="1"
+              [max]="65535">
+            </ion-input>
+            <ion-select 
+              [(ngModel)]="port.protocol" 
+              style="flex: 0 0 80px;">
+              <ion-select-option value="tcp">TCP</ion-select-option>
+              <ion-select-option value="udp">UDP</ion-select-option>
+            </ion-select>
+            <ion-button 
+              fill="clear" 
+              color="danger" 
+              (click)="removePort(i)"
+              style="flex: 0 0 auto;">
+              <ion-icon name="trash-outline" slot="icon-only"></ion-icon>
+            </ion-button>
+          </div>
+        </ion-item>
+        
+        <ion-item button (click)="addPort()" lines="none">
+          <ion-icon name="add-circle-outline" slot="start"></ion-icon>
+          <ion-label>Agregar Puerto</ion-label>
+        </ion-item>
       </ion-list>
-      <ion-button expand="block" (click)="createServer()" class="ion-margin-top">
-        Crear Servidor
+      <ion-button 
+        expand="block" 
+        (click)="createServer()" 
+        class="ion-margin-top create-button"
+        [disabled]="!isFormValid() || isCreating">
+        <ion-spinner *ngIf="isCreating" name="crescent" slot="start"></ion-spinner>
+        <ion-icon *ngIf="!isCreating" name="add-circle-outline" slot="start"></ion-icon>
+        {{ isCreating ? 'Creando...' : 'Crear Servidor' }}
       </ion-button>
-      <ion-note color="primary" style="display: block; text-align: center; margin-top: 10px;">
-        Debug: name={{ serverData.name }}, host={{ serverData.host }}, valid={{ isFormValid() }}
-      </ion-note>
     </ion-card-content>
   </ion-card>
 </ion-content>

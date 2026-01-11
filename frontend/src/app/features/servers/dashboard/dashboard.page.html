@@ -7,7 +7,7 @@
 <ion-content>
   <div *ngIf="loading" class="loading-container">
     <ion-spinner></ion-spinner>
-    <p>Cargando información del servidor...</p>
+    <p>Cargando informacion del servidor...</p>
   </div>
 
   <div *ngIf="!loading && !currentServer" class="empty-state">
@@ -16,246 +16,227 @@
     <p>Selecciona un servidor desde el selector en la barra superior</p>
   </div>
 
-  <div *ngIf="!loading && currentServer" class="dashboard-content">
-    <!-- Card de Estado del Servidor -->
-    <ion-card>
-      <ion-card-header>
-        <ion-card-title>
-          <ion-icon name="server-outline"></ion-icon>
-          {{ currentServer.name }}
-        </ion-card-title>
-      </ion-card-header>
-      <ion-card-content>
-        <ion-grid>
-          <ion-row>
-            <ion-col size="6">
-              <div class="stat-item">
-                <div class="stat-label">Estado</div>
-                <ion-badge 
-                  [color]="serverStatus?.is_running ? 'success' : 'danger'">
-                  {{ serverStatus?.is_running ? 'Running' : 'Stopped' }}
-                </ion-badge>
-              </div>
-            </ion-col>
-            <ion-col size="6">
-              <div class="stat-item">
-                <div class="stat-label">RCON</div>
-                <ion-badge 
-                  [color]="serverStatus?.is_rcon_connected ? 'success' : 'warning'">
-                  {{ serverStatus?.is_rcon_connected ? 'Connected' : 'Disconnected' }}
-                </ion-badge>
-              </div>
-            </ion-col>
-          </ion-row>
-          <ion-row *ngIf="serverStatus?.uptime">
-            <ion-col size="12">
-              <div class="stat-item">
-                <div class="stat-label">Uptime</div>
-                <div class="stat-value">{{ formatUptime(serverStatus?.uptime) }}</div>
-              </div>
-            </ion-col>
-          </ion-row>
-        </ion-grid>
-
-        <!-- Mensaje de cambios pendientes -->
-        <div *ngIf="pendingRestartChanges.length > 0 && serverStatus?.is_running" class="pending-restart-alert">
-          <ion-item color="warning" lines="none">
-            <ion-icon name="warning-outline" slot="start"></ion-icon>
-            <ion-label>
-              <h3>Cambios aplicados necesitan reinicio</h3>
-              <p>{{ pendingRestartChanges.length }} configuración(es) pendiente(s)</p>
-            </ion-label>
-            <ion-button fill="clear" size="small" (click)="openRestartModal()">
-              Ver detalles
-            </ion-button>
-          </ion-item>
+  <div *ngIf="!loading && currentServer" class="dashboard-container">
+    <!-- Seccion Superior: Estado y Controles -->
+    <div class="top-section">
+      <!-- Card Principal de Estado -->
+      <div class="status-card">
+        <div class="status-header">
+          <div class="server-info">
+            <h1 class="server-name">{{ currentServer.name }}</h1>
+            <div class="server-meta">
+              <span class="meta-item">
+                <ion-icon name="cube-outline"></ion-icon>
+                {{ currentServer.server_type || 'vanilla' | uppercase }}
+              </span>
+              <span class="meta-item">
+                <ion-icon name="pricetag-outline"></ion-icon>
+                {{ currentServer.minecraft_version || 'latest' }}
+              </span>
+              <span class="meta-item" *ngIf="currentServer.container_name">
+                <ion-icon name="server-outline"></ion-icon>
+                {{ currentServer.container_name }}
+              </span>
+            </div>
+          </div>
+          <div class="status-badges">
+            <span class="status-badge" [class.online]="serverStatus?.is_running" [class.offline]="!serverStatus?.is_running">
+              <span class="status-dot"></span>
+              {{ serverStatus?.is_running ? 'Online' : 'Offline' }}
+            </span>
+            <span class="status-badge rcon" [class.connected]="serverStatus?.is_rcon_connected">
+              RCON: {{ serverStatus?.is_rcon_connected ? 'OK' : 'N/A' }}
+            </span>
+            <span class="status-badge tps" *ngIf="serverStats && serverStats.tps !== null && serverStats.tps !== undefined" [class.tps-good]="serverStats.tps >= 19" [class.tps-warning]="serverStats.tps >= 15 && serverStats.tps < 19" [class.tps-bad]="serverStats.tps < 15">
+              TPS: {{ serverStats.tps.toFixed(1) }}
+            </span>
+          </div>
         </div>
 
-        <div class="actions">
-          <ion-button 
+        <div class="quick-stats">
+          <div class="stat-box">
+            <span class="stat-icon"><ion-icon name="people-outline"></ion-icon></span>
+            <div class="stat-content">
+              <span class="stat-number">{{ playerCount }}/{{ maxPlayers }}</span>
+              <span class="stat-label">Jugadores</span>
+            </div>
+          </div>
+          <div class="stat-box" *ngIf="serverStats?.memory_usage">
+            <span class="stat-icon"><ion-icon name="hardware-chip-outline"></ion-icon></span>
+            <div class="stat-content">
+              <span class="stat-number">{{ formatBytes(serverStats?.memory_usage) }}</span>
+              <span class="stat-label">RAM ({{ serverStats?.memory_percent?.toFixed(0) || 0 }}%)</span>
+            </div>
+          </div>
+          <div class="stat-box" *ngIf="serverStats?.cpu_usage !== undefined">
+            <span class="stat-icon"><ion-icon name="speedometer-outline"></ion-icon></span>
+            <div class="stat-content">
+              <span class="stat-number">{{ serverStats?.cpu_usage?.toFixed(1) || 0 }}%</span>
+              <span class="stat-label">CPU</span>
+            </div>
+          </div>
+          <div class="stat-box" *ngIf="serverStatus?.uptime">
+            <span class="stat-icon"><ion-icon name="time-outline"></ion-icon></span>
+            <div class="stat-content">
+              <span class="stat-number">{{ formatUptime(serverStatus?.uptime) }}</span>
+              <span class="stat-label">Uptime</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Mensaje de cambios pendientes -->
+        <div *ngIf="pendingRestartChanges.length > 0 && serverStatus?.is_running" class="pending-alert">
+          <ion-icon name="warning-outline"></ion-icon>
+          <span>{{ pendingRestartChanges.length }} cambio(s) pendiente(s) de reinicio</span>
+          <button class="btn-link" (click)="openRestartModal()">Ver detalles</button>
+        </div>
+
+        <div class="control-buttons">
+          <button 
             *ngIf="!serverStatus?.is_running"
             (click)="controlServer('start')"
             [disabled]="actionLoading"
-            color="success">
-            <ion-icon name="play-outline" slot="start"></ion-icon>
-            Iniciar
-          </ion-button>
-          <ion-button 
+            class="control-btn start">
+            <ion-icon name="play-outline"></ion-icon>
+            <span>Iniciar</span>
+          </button>
+          <button 
             *ngIf="serverStatus?.is_running"
             (click)="controlServer('stop')"
             [disabled]="actionLoading"
-            color="danger">
-            <ion-icon name="stop-outline" slot="start"></ion-icon>
-            Detener
-          </ion-button>
-          <ion-button 
+            class="control-btn stop">
+            <ion-icon name="stop-outline"></ion-icon>
+            <span>Detener</span>
+          </button>
+          <button 
             (click)="controlServer('restart')"
             [disabled]="actionLoading || !serverStatus?.is_running"
-            color="warning">
-            <ion-icon name="refresh-outline" slot="start"></ion-icon>
-            Reiniciar
-          </ion-button>
+            class="control-btn restart">
+            <ion-icon name="refresh-outline"></ion-icon>
+            <span>Reiniciar</span>
+          </button>
         </div>
-      </ion-card-content>
-    </ion-card>
+      </div>
 
-    <!-- Card de Jugadores -->
-    <ion-card>
-      <ion-card-header>
-        <ion-card-title>
-          <ion-icon name="people-outline"></ion-icon>
-          Jugadores Online
-        </ion-card-title>
-      </ion-card-header>
-      <ion-card-content>
-        <div class="stat-item">
-          <div class="stat-label">Jugadores Conectados</div>
-          <div class="stat-value-large">
-            {{ playerCount }} / {{ maxPlayers }}
+      <!-- Info del Servidor -->
+      <div class="info-card">
+        <h3 class="card-title">
+          <ion-icon name="information-circle-outline"></ion-icon>
+          Informacion del Servidor
+        </h3>
+        <div class="info-grid">
+          <div class="info-item">
+            <span class="info-label">Puerto Minecraft</span>
+            <span class="info-value">25565</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">Puerto RCON</span>
+            <span class="info-value">{{ currentServer.rcon_port || 25575 }}</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">Memoria</span>
+            <span class="info-value">{{ currentServer.memory_limit_mb || 2048 }} MB</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">Java Heap</span>
+            <span class="info-value">{{ currentServer.java_heap_min_mb || 512 }}-{{ currentServer.java_heap_max_mb || 1536 }} MB</span>
+          </div>
+          <div class="info-item" *ngIf="currentServer.additional_ports?.length">
+            <span class="info-label">Puertos Extra</span>
+            <span class="info-value">{{ currentServer.additional_ports?.length }}</span>
+          </div>
+          <div class="info-item" *ngIf="serverStats?.tps != null">
+            <span class="info-label">TPS</span>
+            <span class="info-value" [class.tps-good]="(serverStats?.tps || 0) >= 19" [class.tps-warning]="(serverStats?.tps || 0) >= 15 && (serverStats?.tps || 0) < 19" [class.tps-bad]="(serverStats?.tps || 0) < 15">
+              {{ serverStats?.tps?.toFixed(1) || 'N/A' }}
+            </span>
           </div>
         </div>
-        <div *ngIf="onlinePlayers.length > 0" class="players-list">
-          <ion-list>
-            <ion-item *ngFor="let player of onlinePlayers">
-              <ion-label>
-                <h3>{{ player }}</h3>
-              </ion-label>
-              <ion-badge color="success" slot="end">Online</ion-badge>
-            </ion-item>
-          </ion-list>
-        </div>
-        <div *ngIf="onlinePlayers.length === 0 && playerCount === 0" class="empty-players">
-          <p>No hay jugadores conectados</p>
-        </div>
-      </ion-card-content>
-    </ion-card>
+      </div>
+    </div>
 
-    <!-- Card de Estadísticas -->
-    <ion-card *ngIf="serverStats">
-      <ion-card-header>
-        <ion-card-title>
-          <ion-icon name="server-outline"></ion-icon>
-          Estadísticas del Sistema
-        </ion-card-title>
-      </ion-card-header>
-      <ion-card-content>
-        <ion-grid>
-          <ion-row>
-            <!-- Primera columna: RAM y CPU -->
-            <ion-col size="6">
-              <div class="stat-item" *ngIf="serverStats.memory_usage">
-                <div class="stat-label">Uso de Memoria</div>
-                <div class="stat-value">
-                  {{ formatBytes(serverStats.memory_usage) }}
-                  <span *ngIf="serverStats.memory_percent !== undefined && serverStats.memory_percent !== null" class="memory-percent">
-                    ({{ serverStats.memory_percent.toFixed(1) }}%)
-                  </span>
-                </div>
-              </div>
-              <div class="stat-item" *ngIf="serverStats.cpu_usage !== undefined">
-                <div class="stat-label">Uso de CPU</div>
-                <div class="stat-value">{{ (serverStats.cpu_usage || 0).toFixed(2) }}%</div>
-              </div>
-            </ion-col>
-            <!-- Segunda columna: TPS y otra información -->
-            <ion-col size="6">
-              <div class="stat-item" *ngIf="serverStats.tps !== undefined && serverStats.tps !== null">
-                <div class="stat-label">TPS</div>
-                <div class="stat-value" [class.tps-good]="serverStats.tps >= 19" [class.tps-warning]="serverStats.tps >= 15 && serverStats.tps < 19" [class.tps-bad]="serverStats.tps < 15">
-                  {{ serverStats.tps.toFixed(2) }}
-                </div>
-              </div>
-              <div class="stat-item" *ngIf="serverStats.mspt !== undefined && serverStats.mspt !== null">
-                <div class="stat-label">MSPT</div>
-                <div class="stat-value" [class.mspt-good]="serverStats.mspt <= 50" [class.mspt-warning]="serverStats.mspt > 50 && serverStats.mspt <= 100" [class.mspt-bad]="serverStats.mspt > 100">
-                  {{ serverStats.mspt.toFixed(2) }} ms
-                </div>
-              </div>
-              <div class="stat-item" *ngIf="serverStatus?.uptime">
-                <div class="stat-label">Uptime</div>
-                <div class="stat-value">{{ formatUptime(serverStatus?.uptime) }}</div>
-              </div>
-            </ion-col>
-          </ion-row>
-        </ion-grid>
-      </ion-card-content>
-    </ion-card>
-
-    <!-- Card de Logs -->
-    <ion-card>
-      <ion-card-header>
-        <ion-card-title>
-          <ion-icon name="document-text-outline"></ion-icon>
-          Logs del Servidor
-        </ion-card-title>
-      </ion-card-header>
-      <ion-card-content>
-        <div *ngIf="currentServer" style="height: 300px;">
-          <app-logs-viewer [serverId]="currentServer.id" [autoRefresh]="true" [maxLines]="50"></app-logs-viewer>
+    <!-- Seccion de Jugadores -->
+    <div class="players-section" *ngIf="onlinePlayers.length > 0 || playerCount > 0">
+      <div class="section-card">
+        <h3 class="card-title">
+          <ion-icon name="people-outline"></ion-icon>
+          Jugadores Online ({{ playerCount }})
+        </h3>
+        <div class="players-grid" *ngIf="onlinePlayers.length > 0">
+          <div class="player-chip" *ngFor="let player of onlinePlayers">
+            <img [src]="'https://mc-heads.net/avatar/' + player + '/32'" [alt]="player" class="player-avatar">
+            <span>{{ player }}</span>
+          </div>
         </div>
-      </ion-card-content>
-    </ion-card>
+        <p *ngIf="onlinePlayers.length === 0" class="empty-text">No hay jugadores conectados</p>
+      </div>
+    </div>
 
-    <!-- Card de Chat -->
-    <ion-card>
-      <ion-card-header>
-        <ion-card-title>
-          <ion-icon name="chatbubbles-outline"></ion-icon>
-          Chat del Servidor
-        </ion-card-title>
-      </ion-card-header>
-      <ion-card-content>
-        <div *ngIf="currentServer" style="height: 300px;">
-          <app-chat-viewer [serverId]="currentServer.id" [autoRefresh]="true" [maxMessages]="50"></app-chat-viewer>
+    <!-- Seccion de Consolas (2 columnas) -->
+    <div class="consoles-section">
+      <div class="console-card logs">
+        <div class="console-header">
+          <h3>
+            <ion-icon name="document-text-outline"></ion-icon>
+            Logs del Servidor
+          </h3>
         </div>
-      </ion-card-content>
-    </ion-card>
-
-    <!-- Card de Consola de Comandos -->
-    <ion-card>
-      <ion-card-header>
-        <ion-card-title>
-          <ion-icon name="terminal-outline"></ion-icon>
-          Consola de Comandos
-        </ion-card-title>
-      </ion-card-header>
-      <ion-card-content>
-        <div *ngIf="currentServer" style="height: 400px;">
-          <app-command-console [serverId]="currentServer.id"></app-command-console>
+        <div class="console-body">
+          <app-logs-viewer *ngIf="currentServer" [serverId]="currentServer.id" [autoRefresh]="true" [maxLines]="100"></app-logs-viewer>
         </div>
-      </ion-card-content>
-    </ion-card>
+      </div>
 
-    <!-- Card de Acciones Rápidas -->
-    <ion-card>
-      <ion-card-header>
-        <ion-card-title>Acciones Rápidas</ion-card-title>
-      </ion-card-header>
-      <ion-card-content>
-        <ion-list lines="none">
-          <ion-item button (click)="navigateTo('/players')" style="cursor: pointer;">
-            <ion-icon name="people-outline" slot="start"></ion-icon>
-            <ion-label>Gestionar Jugadores</ion-label>
-          </ion-item>
-          <ion-item button (click)="navigateTo('/mods')" style="cursor: pointer;">
-            <ion-icon name="cube-outline" slot="start"></ion-icon>
-            <ion-label>Gestionar Mods</ion-label>
-          </ion-item>
-          <ion-item button (click)="navigateTo('/backups')" style="cursor: pointer;">
-            <ion-icon name="folder-outline" slot="start"></ion-icon>
-            <ion-label>Gestionar Backups</ion-label>
-          </ion-item>
-          <ion-item button (click)="navigateTo('/whitelist')" style="cursor: pointer;">
-            <ion-icon name="checkmark-circle-outline" slot="start"></ion-icon>
-            <ion-label>Whitelist</ion-label>
-          </ion-item>
-          <ion-item button (click)="navigateTo('/settings')" style="cursor: pointer;">
-            <ion-icon name="settings-outline" slot="start"></ion-icon>
-            <ion-label>Configuración</ion-label>
-          </ion-item>
-        </ion-list>
-      </ion-card-content>
-    </ion-card>
+      <div class="console-card chat">
+        <div class="console-header">
+          <h3>
+            <ion-icon name="chatbubbles-outline"></ion-icon>
+            Chat del Servidor
+          </h3>
+        </div>
+        <div class="console-body">
+          <app-chat-viewer *ngIf="currentServer" [serverId]="currentServer.id" [autoRefresh]="true" [maxMessages]="100"></app-chat-viewer>
+        </div>
+      </div>
+    </div>
+
+    <!-- Consola de Comandos (ancho completo) -->
+    <div class="command-section">
+      <div class="console-card command">
+        <div class="console-header">
+          <h3>
+            <ion-icon name="terminal-outline"></ion-icon>
+            Consola RCON
+          </h3>
+        </div>
+        <div class="console-body command-body">
+          <app-command-console *ngIf="currentServer" [serverId]="currentServer.id"></app-command-console>
+        </div>
+      </div>
+    </div>
+
+    <!-- Acciones Rapidas -->
+    <div class="quick-actions">
+      <button class="action-btn" (click)="navigateTo('/players')">
+        <ion-icon name="people-outline"></ion-icon>
+        <span>Jugadores</span>
+      </button>
+      <button class="action-btn" (click)="navigateTo('/mods')">
+        <ion-icon name="cube-outline"></ion-icon>
+        <span>Mods</span>
+      </button>
+      <button class="action-btn" (click)="navigateTo('/backups')">
+        <ion-icon name="folder-outline"></ion-icon>
+        <span>Backups</span>
+      </button>
+      <button class="action-btn" (click)="navigateTo('/whitelist')">
+        <ion-icon name="checkmark-circle-outline"></ion-icon>
+        <span>Whitelist</span>
+      </button>
+      <button class="action-btn" (click)="navigateTo('/settings')">
+        <ion-icon name="settings-outline"></ion-icon>
+        <span>Config</span>
+      </button>
+    </div>
   </div>
 
   <!-- Modal de cambios pendientes de reinicio -->
@@ -263,7 +244,7 @@
     <ng-template>
       <ion-header>
         <ion-toolbar>
-          <ion-title>Cambios Pendientes de Reinicio</ion-title>
+          <ion-title>Cambios Pendientes</ion-title>
           <ion-buttons slot="end">
             <ion-button (click)="closeRestartModal()">
               <ion-icon name="close-outline"></ion-icon>
@@ -272,15 +253,13 @@
         </ion-toolbar>
       </ion-header>
       <ion-content class="ion-padding">
-        <p>Los siguientes cambios requieren reinicio del servidor para aplicarse:</p>
+        <p>Los siguientes cambios requieren reinicio:</p>
         <ion-list>
           <ion-item *ngFor="let change of pendingRestartChanges">
-            <ion-label>
-              <h3>{{ getChangeDisplayName(change) }}</h3>
-            </ion-label>
+            <ion-label>{{ getChangeDisplayName(change) }}</ion-label>
           </ion-item>
         </ion-list>
-        <ion-button expand="block" color="warning" (click)="controlServer('restart'); closeRestartModal()" [disabled]="actionLoading || !serverStatus?.is_running" class="ion-margin-top">
+        <ion-button expand="block" color="warning" (click)="controlServer('restart'); closeRestartModal()" [disabled]="actionLoading" class="ion-margin-top">
           <ion-icon name="refresh-outline" slot="start"></ion-icon>
           Reiniciar Servidor
         </ion-button>

@@ -13,3 +13,75 @@
     margin: 0;
   }
 }
+
+.config-actions-header {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: var(--ion-color-light);
+  border-bottom: 1px solid var(--ion-color-medium);
+  
+  ion-button {
+    margin: 0;
+  }
+  
+  @media (max-width: 576px) {
+    padding: 0.5rem;
+    flex-wrap: wrap;
+    
+    ion-button {
+      flex: 1;
+      min-width: calc(50% - 0.25rem);
+    }
+  }
+}
+
+.config-info {
+  margin-bottom: 1rem;
+  padding: 0.75rem;
+  background: var(--ion-color-light);
+  border-radius: 8px;
+  
+  p {
+    margin: 0.25rem 0;
+    font-size: 0.9rem;
+  }
+}
+
+.config-actions {
+  margin-top: 1rem;
+  
+  ion-button {
+    margin-top: 0.5rem;
+  }
+}
+
+.file-size {
+  font-size: 0.85rem;
+  color: var(--ion-color-medium);
+}
+
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: var(--ion-color-light);
+  border-bottom: 1px solid var(--ion-color-medium);
+  
+  ion-button {
+    margin: 0;
+    --padding-start: 8px;
+    --padding-end: 8px;
+  }
+  
+  .current-path {
+    flex: 1;
+    font-size: 0.9rem;
+    color: var(--ion-color-medium);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}

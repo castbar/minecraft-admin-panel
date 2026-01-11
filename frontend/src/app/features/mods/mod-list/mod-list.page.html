@@ -9,9 +9,6 @@
     <ion-segment-button value="installed">
       <ion-label>Instalados</ion-label>
     </ion-segment-button>
-    <ion-segment-button value="pool">
-      <ion-label>Pool</ion-label>
-    </ion-segment-button>
     <ion-segment-button value="configs">
       <ion-label>Configuraciones</ion-label>
     </ion-segment-button>
@@ -66,45 +63,36 @@
     </div>
   </div>
 
-  <!-- Tab Pool -->
-  <div *ngIf="activeTab === 'pool'">
-    <ion-searchbar
-      [(ngModel)]="poolSearchTerm"
-      (ionInput)="onPoolSearch($event)"
-      placeholder="Buscar en el pool...">
-    </ion-searchbar>
-
-    <div *ngIf="loading" class="loading-container">
-      <ion-spinner></ion-spinner>
-    </div>
-
-    <ion-list *ngIf="!loading && filteredPoolMods.length > 0">
-      <ion-item *ngFor="let mod of filteredPoolMods" lines="full">
-        <ion-icon name="cube-outline" slot="start" color="primary"></ion-icon>
-        <ion-label>
-          <h2>{{ mod.display_name || mod.name }}</h2>
-          <p *ngIf="mod.description">{{ mod.description }}</p>
-          <div class="mod-info">
-            <ion-badge>{{ mod.category }}</ion-badge>
-            <ion-badge *ngFor="let type of mod.compatible_servers" color="success">{{ type }}</ion-badge>
-          </div>
-        </ion-label>
-        <div slot="end" class="item-actions">
-          <ion-button fill="outline" size="small" (click)="installFromPool(mod)">
-            <ion-icon name="add-outline" slot="start"></ion-icon>
-            Instalar
-          </ion-button>
-          <ion-button *ngIf="mod.download_url" fill="clear" size="small" (click)="openDownload(mod.download_url!)">
-            <ion-icon name="download-outline" slot="icon-only"></ion-icon>
-          </ion-button>
-        </div>
-      </ion-item>
-    </ion-list>
-  </div>
-
   <!-- Tab Configuraciones -->
   <div *ngIf="activeTab === 'configs'">
-    <ion-list *ngIf="modsWithConfig.length > 0">
+    <div class="config-actions-header">
+      <ion-button fill="outline" size="small" (click)="loadConfigFiles()" [disabled]="loading">
+        <ion-icon name="refresh-outline" slot="start"></ion-icon>
+        Actualizar
+      </ion-button>
+    </div>
+
+    <div *ngIf="currentConfigFilePath && currentConfigFilePath !== '/data/config'" class="breadcrumb">
+      <ion-button fill="clear" size="small" (click)="navigateUp()">
+        <ion-icon name="arrow-back-outline" slot="start"></ion-icon>
+        Volver
+      </ion-button>
+      <span class="current-path">{{ currentConfigFilePath }}</span>
+    </div>
+    
+    <ion-list *ngIf="configFiles.length > 0">
+      <ion-item *ngFor="let file of configFiles" button (click)="openConfigFile(file)" lines="full">
+        <ion-icon [name]="file.is_dir ? 'folder-outline' : 'document-text-outline'" slot="start"></ion-icon>
+        <ion-label>
+          <h2>{{ file.name }}</h2>
+          <p>{{ file.path }}</p>
+          <p *ngIf="file.size && !file.is_dir" class="file-size">{{ formatFileSize(file.size) }}</p>
+        </ion-label>
+        <ion-badge *ngIf="file.mod_name" color="primary" slot="end">{{ file.mod_name }}</ion-badge>
+      </ion-item>
+    </ion-list>
+
+    <ion-list *ngIf="modsWithConfig.length > 0 && configFiles.length === 0">
       <ion-item *ngFor="let mod of modsWithConfig" button (click)="openConfigModal(mod)" lines="full">
         <ion-icon name="settings-outline" slot="start"></ion-icon>
         <ion-label>
@@ -115,10 +103,10 @@
       </ion-item>
     </ion-list>
 
-    <div *ngIf="modsWithConfig.length === 0" class="empty-state">
+    <div *ngIf="modsWithConfig.length === 0 && configFiles.length === 0" class="empty-state">
       <ion-icon name="settings-outline" size="large"></ion-icon>
       <h2>No hay configuraciones disponibles</h2>
-      <p>Los mods con configuración aparecerán aquí</p>
+      <p>Los archivos de configuración de los mods aparecerán aquí</p>
     </div>
   </div>
 
@@ -134,34 +122,78 @@
         </ion-toolbar>
       </ion-header>
       <ion-content class="ion-padding">
-        <input type="file" accept=".jar" (change)="onFileSelected($event)" #fileInput style="display: none;">
+        <input type="file" accept=".jar,.zip" multiple (change)="onFileSelected($event)" #fileInput style="display: none;">
         <ion-button expand="block" (click)="fileInput.click()" [disabled]="isUploading">
-          Seleccionar archivo .jar
+          <ion-icon name="cloud-upload-outline" slot="start"></ion-icon>
+          Seleccionar archivo(s) .jar o .zip
         </ion-button>
-        <p *ngIf="uploadFile" class="ion-margin-top">Archivo seleccionado: {{ uploadFile.name }}</p>
-        <ion-button expand="block" (click)="uploadMod()" [disabled]="!uploadFile || isUploading" class="ion-margin-top">
+        
+        <div *ngIf="uploadFiles.length > 0" class="ion-margin-top">
+          <p><strong>Archivos seleccionados ({{ uploadFiles.length }}):</strong></p>
+          <ion-list>
+            <ion-item *ngFor="let file of uploadFiles; let i = index">
+              <ion-icon 
+                [name]="file.name.endsWith('.zip') ? 'archive-outline' : 'cube-outline'" 
+                slot="start"
+                [color]="file.name.endsWith('.zip') ? 'warning' : 'primary'">
+              </ion-icon>
+              <ion-label>
+                <h3>{{ file.name }}</h3>
+                <p>{{ (file.size / 1024 / 1024).toFixed(2) }} MB</p>
+              </ion-label>
+              <ion-button 
+                fill="clear" 
+                color="danger" 
+                (click)="removeUploadFile(i)"
+                [disabled]="isUploading">
+                <ion-icon name="close-circle-outline" slot="icon-only"></ion-icon>
+              </ion-button>
+            </ion-item>
+          </ion-list>
+          <ion-button 
+            fill="clear" 
+            size="small" 
+            (click)="clearUploadFiles()"
+            [disabled]="isUploading"
+            class="ion-margin-top">
+            Limpiar lista
+          </ion-button>
+        </div>
+        
+        <p class="ion-margin-top ion-text-center" style="color: var(--ion-color-medium); font-size: 0.875rem;">
+          Puedes seleccionar múltiples archivos .jar o un archivo .zip (modpack)
+        </p>
+        
+        <ion-button 
+          expand="block" 
+          (click)="uploadMod()" 
+          [disabled]="uploadFiles.length === 0 || isUploading" 
+          class="ion-margin-top">
           <ion-spinner *ngIf="isUploading" name="crescent" style="width: 1rem; height: 1rem; margin-right: 0.5rem;"></ion-spinner>
-          <span>Subir Mod</span>
+          <span>Subir {{ uploadFiles.length > 1 ? uploadFiles.length + ' archivos' : 'archivo' }}</span>
         </ion-button>
       </ion-content>
     </ng-template>
   </ion-modal>
 
   <!-- Modal Configuración -->
-  <ion-modal [isOpen]="isConfigModalOpen" (willDismiss)="isConfigModalOpen = false">
+  <ion-modal [isOpen]="isConfigModalOpen" (willDismiss)="closeConfigModal()">
     <ng-template>
       <ion-header>
         <ion-toolbar>
-          <ion-title>Configuración: {{ selectedModConfig?.mod_name }}</ion-title>
+          <ion-title>
+            {{ selectedConfigFile ? selectedConfigFile.name : (selectedModConfig?.mod_name || 'Configuración') }}
+          </ion-title>
           <ion-buttons slot="end">
-            <ion-button (click)="isConfigModalOpen = false">Cerrar</ion-button>
+            <ion-button (click)="closeConfigModal()">Cerrar</ion-button>
           </ion-buttons>
         </ion-toolbar>
       </ion-header>
       <ion-content class="ion-padding">
-        <div class="config-info" *ngIf="selectedModConfig">
+        <div class="config-info" *ngIf="selectedModConfig || selectedConfigFile">
           <p><strong>Formato:</strong> {{ configFormat.toUpperCase() }}</p>
-          <p *ngIf="selectedModConfig.config_file_path"><strong>Archivo:</strong> {{ selectedModConfig.config_file_path }}</p>
+          <p *ngIf="selectedModConfig?.config_file_path"><strong>Archivo:</strong> {{ selectedModConfig?.config_file_path }}</p>
+          <p *ngIf="selectedConfigFile?.path"><strong>Ruta:</strong> {{ selectedConfigFile?.path }}</p>
         </div>
         <ion-textarea
           [(ngModel)]="configContent"
@@ -169,10 +201,10 @@
           [placeholder]="'Contenido de la configuración (' + configFormat.toUpperCase() + ')...'">
         </ion-textarea>
         <div class="config-actions">
-          <ion-button expand="block" (click)="saveConfig()" class="ion-margin-top">
+          <ion-button expand="block" (click)="selectedConfigFile ? saveConfigFile() : saveConfig()" class="ion-margin-top">
             Guardar
           </ion-button>
-          <ion-button expand="block" fill="outline" color="warning" (click)="resetConfig()" class="ion-margin-top">
+          <ion-button *ngIf="!selectedConfigFile" expand="block" fill="outline" color="warning" (click)="resetConfig()" class="ion-margin-top">
             Resetear a Default
           </ion-button>
         </div>

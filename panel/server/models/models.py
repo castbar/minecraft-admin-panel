@@ -40,9 +40,17 @@ class Server(models.Model):
         null=True,
         help_text="Nombre del contenedor Docker (si es diferente del host)"
     )
+    port = models.IntegerField(default=25565, help_text="Puerto del servidor Minecraft")
     rcon_port = models.IntegerField(default=25575)
     rcon_password = models.CharField(max_length=255)
     minecraft_data_path = models.CharField(max_length=500, default='/data')
+    # Puertos adicionales para mods/plugins (ej: Simple Voice Chat necesita UDP 24454)
+    # Formato: [{"port": 24454, "protocol": "udp", "host_port": 24454}, ...]
+    additional_ports = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Puertos adicionales a exponer. Formato: [{'port': 24454, 'protocol': 'udp', 'host_port': 24454}]"
+    )
     is_active = models.BooleanField(default=True)
     
     # Tipo de servidor y versión

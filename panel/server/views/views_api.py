@@ -831,6 +831,59 @@ def server_control(request, server_id=None, action=None):
         result = None
         if action == 'start':
             result = start_container(server.container_name)
+            
+            # Si el contenedor no existe, intentar recrearlo automáticamente
+            if result and result.get('status') == 'not_found':
+                print(f"🔄 Contenedor {server.container_name} no existe, intentando recrearlo automáticamente...")
+                try:
+                    from ..utils.docker_control import create_minecraft_container
+                    
+                    # Obtener puerto de Minecraft (por defecto 25565)
+                    minecraft_port = 25565
+                    
+                    # Recrear el contenedor con las configuraciones guardadas
+                    create_result = create_minecraft_container(
+                        container_name=server.container_name,
+                        server_type=server.server_type,
+                        minecraft_version=server.minecraft_version,
+                        rcon_port=server.rcon_port,
+                        rcon_password=server.rcon_password,
+                        memory_limit_mb=server.memory_limit_mb,
+                        java_heap_max_mb=server.java_heap_max_mb,
+                        java_heap_min_mb=server.java_heap_min_mb,
+                        minecraft_data_path=server.minecraft_data_path,
+                        minecraft_port=minecraft_port,
+                        network='minecraft-servers',
+                        start_container=True,  # Iniciar automáticamente
+                        additional_ports=server.additional_ports or []
+                    )
+                    
+                    if create_result.get('success'):
+                        print(f"✅ Contenedor {server.container_name} recreado exitosamente")
+                        send_notification(server, 'container_recreated', f"Contenedor para '{server.name}' fue recreado automáticamente y está iniciando.")
+                        return JsonResponse({
+                            'success': True,
+                            'message': f'Contenedor recreado e iniciado correctamente. Los datos del servidor se han conservado.',
+                            'container_recreated': True
+                        })
+                    else:
+                        error_msg = create_result.get('error', 'Error desconocido al recrear contenedor')
+                        print(f"❌ Error al recrear contenedor: {error_msg}")
+                        send_notification(server, 'container_recreate_failed', f"No se pudo recrear el contenedor para '{server.name}': {error_msg}")
+                        return JsonResponse({
+                            'success': False,
+                            'error': f'Contenedor no existe y no se pudo recrear: {error_msg}',
+                            'container_recreated': False
+                        }, status=500)
+                except Exception as recreate_error:
+                    error_msg = str(recreate_error)
+                    print(f"❌ Excepción al recrear contenedor: {error_msg}")
+                    send_notification(server, 'container_recreate_failed', f"Error al recrear contenedor para '{server.name}': {error_msg}")
+                    return JsonResponse({
+                        'success': False,
+                        'error': f'Contenedor no existe y no se pudo recrear: {error_msg}',
+                        'container_recreated': False
+                    }, status=500)
         elif action == 'stop':
             result = stop_container(server.container_name)
         elif action == 'restart':

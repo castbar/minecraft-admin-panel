@@ -36,7 +36,21 @@
 
     .toggle-btn {
       --color: white;
+      --color-hover: rgba(255, 255, 255, 0.8);
       margin: 0;
+      color: white !important;
+      
+      ion-icon {
+        color: white !important;
+      }
+      
+      &:hover {
+        --color: rgba(255, 255, 255, 0.9);
+        
+        ion-icon {
+          color: rgba(255, 255, 255, 0.9) !important;
+        }
+      }
     }
   }
 

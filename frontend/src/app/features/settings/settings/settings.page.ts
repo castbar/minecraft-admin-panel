@@ -38,6 +38,8 @@ import {
   peopleOutline,
   informationCircleOutline,
   addOutline,
+  addCircleOutline,
+  trashOutline,
 } from 'ionicons/icons';
 import { ServerService } from '../../servers/services/server.service';
 import { MinecraftVersionService } from '../services/minecraft-version.service';
@@ -90,6 +92,7 @@ export class SettingsPage implements OnInit {
   serverSettings: Server | null = null;
   loading = false;
   private savingSettings = false;
+  additionalPorts: Array<{ port: number; protocol: 'tcp' | 'udp'; host_port: number }> = [];
 
   // Versions
   versions: any[] = [];
@@ -120,6 +123,8 @@ export class SettingsPage implements OnInit {
       peopleOutline,
       informationCircleOutline,
       addOutline,
+      addCircleOutline,
+      trashOutline,
     });
   }
 
@@ -153,6 +158,16 @@ export class SettingsPage implements OnInit {
     this.serverService.getServerSettings(serverId).subscribe({
       next: (settings: any) => {
         this.serverSettings = settings;
+        // Cargar puertos adicionales si existen
+        if (settings.additional_ports && Array.isArray(settings.additional_ports)) {
+          this.additionalPorts = settings.additional_ports.map((p: any) => ({
+            port: p.port || p.container_port || 0,
+            protocol: (p.protocol || 'tcp').toLowerCase() as 'tcp' | 'udp',
+            host_port: p.host_port || p.port || p.container_port || 0
+          }));
+        } else {
+          this.additionalPorts = [];
+        }
         this.loading = false;
       },
       error: () => {
@@ -256,6 +271,14 @@ export class SettingsPage implements OnInit {
       force_gamemode: this.serverSettings.force_gamemode,
       generate_structures: this.serverSettings.generate_structures,
       allow_nether: this.serverSettings.allow_nether,
+      // Puertos adicionales
+      additional_ports: this.additionalPorts
+        .filter(p => p.port > 0 && p.port <= 65535)
+        .map(p => ({
+          port: p.port,
+          protocol: p.protocol,
+          host_port: p.host_port || p.port
+        })),
     };
 
     console.log('Datos a enviar:', JSON.stringify(updateData, null, 2));
@@ -386,5 +409,17 @@ export class SettingsPage implements OnInit {
       is_staff: false,
       is_active: true,
     };
+  }
+
+  addPort(): void {
+    this.additionalPorts.push({
+      port: 24454,
+      protocol: 'udp',
+      host_port: 24454
+    });
+  }
+
+  removePort(index: number): void {
+    this.additionalPorts.splice(index, 1);
   }
 }

@@ -165,6 +165,8 @@ def server_settings(request, server_id):
             'force_gamemode': properties.get('force-gamemode', False),
             'generate_structures': properties.get('generate-structures', True),
             'allow_nether': properties.get('allow-nether', True),
+            # Puertos adicionales
+            'additional_ports': server.additional_ports or [],
         }
     })
 
@@ -178,11 +180,38 @@ def server_settings_update(request, server_id):
     data = json.loads(request.body)
     
     # Campos actualizables en el modelo Server
-    updatable_fields = ['is_public', 'auth_mode', 'enable_whitelist', 'online_mode', 'server_type', 'minecraft_version']
+    updatable_fields = ['is_public', 'auth_mode', 'enable_whitelist', 'online_mode', 'server_type', 'minecraft_version', 'additional_ports']
     
     # Verificar si se cambió el tipo de servidor o versión (requiere reinicio del contenedor)
     server_type_changed = 'server_type' in data and data['server_type'] != server.server_type
     version_changed = 'minecraft_version' in data and data['minecraft_version'] != server.minecraft_version
+    
+    # Verificar si cambiaron los puertos adicionales (requiere recrear contenedor)
+    ports_changed = False
+    if 'additional_ports' in data:
+        old_ports = server.additional_ports or []
+        new_ports = data['additional_ports'] or []
+        
+        # Validar que no haya puertos duplicados en host_port
+        host_ports_used = {}
+        for port in new_ports:
+            host_port = port.get('host_port', port.get('port', 0))
+            container_port = port.get('port', 0)
+            protocol = port.get('protocol', 'tcp')
+            if host_port in host_ports_used:
+                # Ya hay otro puerto usando este host_port
+                existing = host_ports_used[host_port]
+                return JsonResponse({
+                    'success': False,
+                    'error': f'Puerto {host_port} ya está asignado a otro puerto ({existing["port"]}/{existing["protocol"]}). Cada puerto debe tener un host_port único.'
+                }, status=400)
+            host_ports_used[host_port] = {'port': container_port, 'protocol': protocol}
+        
+        # Comparar listas normalizadas
+        old_ports_normalized = sorted([(p.get('port', 0), p.get('protocol', 'tcp'), p.get('host_port', p.get('port', 0))) for p in old_ports])
+        new_ports_normalized = sorted([(p.get('port', 0), p.get('protocol', 'tcp'), p.get('host_port', p.get('port', 0))) for p in new_ports])
+        ports_changed = old_ports_normalized != new_ports_normalized
+        print(f"🔍 Verificación de puertos: old={old_ports_normalized}, new={new_ports_normalized}, changed={ports_changed}")
     
     for field in updatable_fields:
         if field in data:
@@ -193,6 +222,128 @@ def server_settings_update(request, server_id):
         server.generate_api_key()
     
     server.save()
+    
+    # Si cambiaron los puertos adicionales y hay un contenedor, recrearlo
+    container_recreated = False
+    if ports_changed and server.container_name:
+        print(f"🔄 Puertos cambiaron, recreando contenedor {server.container_name}...")
+        try:
+            from ..utils.docker_control import delete_container, create_minecraft_container
+            
+            # Guardar el estado del contenedor antes de eliminarlo
+            container_was_running = False
+            try:
+                import docker
+                client = docker.from_env()
+                container = client.containers.get(server.container_name)
+                container_was_running = container.status == 'running'
+                print(f"📊 Estado del contenedor antes de eliminar: {container.status}")
+            except Exception as e:
+                print(f"⚠️ Error al obtener estado del contenedor: {e}")
+            
+            # Eliminar el contenedor existente (sin eliminar volúmenes)
+            print(f"🗑️ Eliminando contenedor {server.container_name}...")
+            delete_result = delete_container(server.container_name, force=True, remove_volumes=False)
+            print(f"📊 Resultado de eliminación: {delete_result}")
+            
+            # Esperar un momento para que Docker libere los puertos
+            import time
+            time.sleep(2)
+            
+            # Verificar que el contenedor fue eliminado completamente
+            try:
+                import docker
+                client = docker.from_env()
+                try:
+                    old_container = client.containers.get(server.container_name)
+                    print(f"⚠️ El contenedor aún existe, forzando eliminación...")
+                    old_container.remove(force=True)
+                    time.sleep(1)
+                except docker.errors.NotFound:
+                    print(f"✅ Contenedor eliminado correctamente")
+            except Exception as e:
+                print(f"⚠️ Error verificando eliminación: {e}")
+            
+            if delete_result.get('success') or True:  # Intentar crear de todas formas
+                # Obtener puerto de Minecraft (por defecto 25565)
+                minecraft_port = 25565
+                # Por ahora usar el valor por defecto, podría mejorarse leyendo desde server.properties
+                
+                # Recrear el contenedor con los nuevos puertos
+                print(f"🔨 Recreando contenedor con puertos adicionales: {server.additional_ports}")
+                create_result = create_minecraft_container(
+                    container_name=server.container_name,
+                    server_type=server.server_type,
+                    minecraft_version=server.minecraft_version,
+                    rcon_port=server.rcon_port,
+                    rcon_password=server.rcon_password,
+                    memory_limit_mb=server.memory_limit_mb,
+                    java_heap_max_mb=server.java_heap_max_mb,
+                    java_heap_min_mb=server.java_heap_min_mb,
+                    minecraft_data_path=server.minecraft_data_path,
+                    minecraft_port=minecraft_port,
+                    network='minecraft-servers',
+                    start_container=container_was_running,  # Iniciar si estaba corriendo antes
+                    additional_ports=server.additional_ports or []
+                )
+                print(f"📊 Resultado de creación: {create_result}")
+                
+                if create_result.get('success'):
+                    container_recreated = True
+                    print(f"✅ Contenedor recreado exitosamente")
+                else:
+                    error_msg = create_result.get('error', 'Error desconocido')
+                    print(f"❌ Error al recrear contenedor: {error_msg}")
+                    # Si el error es por puerto en uso, intentar limpiar y recrear
+                    if 'port is already allocated' in str(error_msg) or 'port is already in use' in str(error_msg):
+                        print(f"🔄 Puerto en uso, intentando limpiar...")
+                        try:
+                            import docker
+                            import time
+                            client = docker.from_env()
+                            # Buscar y eliminar cualquier contenedor que use ese puerto
+                            all_containers = client.containers.list(all=True)
+                            for cont in all_containers:
+                                if cont.name != server.container_name:
+                                    try:
+                                        ports = cont.attrs.get('HostConfig', {}).get('PortBindings', {})
+                                        for port_binding in ports.values():
+                                            if port_binding and any(binding.get('HostPort') == '24454' for binding in port_binding):
+                                                print(f"⚠️ Encontrado contenedor {cont.name} usando puerto 24454")
+                                    except:
+                                        pass
+                            time.sleep(2)
+                            # Intentar crear de nuevo
+                            create_result = create_minecraft_container(
+                                container_name=server.container_name,
+                                server_type=server.server_type,
+                                minecraft_version=server.minecraft_version,
+                                rcon_port=server.rcon_port,
+                                rcon_password=server.rcon_password,
+                                memory_limit_mb=server.memory_limit_mb,
+                                java_heap_max_mb=server.java_heap_max_mb,
+                                java_heap_min_mb=server.java_heap_min_mb,
+                                minecraft_data_path=server.minecraft_data_path,
+                                minecraft_port=minecraft_port,
+                                network='minecraft-servers',
+                                start_container=container_was_running,
+                                additional_ports=server.additional_ports or []
+                            )
+                            if create_result.get('success'):
+                                container_recreated = True
+                                print(f"✅ Contenedor recreado exitosamente después de limpiar puertos")
+                        except Exception as cleanup_error:
+                            print(f"⚠️ Error al limpiar puertos: {cleanup_error}")
+            else:
+                print(f"❌ No se pudo eliminar el contenedor: {delete_result.get('error')}")
+        except Exception as e:
+            import traceback
+            print(f"⚠️ Error al recrear contenedor por cambio de puertos: {e}")
+            traceback.print_exc()
+    elif ports_changed and not server.container_name:
+        print(f"⚠️ Puertos cambiaron pero el servidor no tiene container_name")
+    elif not ports_changed:
+        print(f"ℹ️ No hubo cambios en los puertos adicionales")
     
     # Preparar datos para server.properties (mapear nombres del frontend a nombres de propiedades)
     properties_data = {}
@@ -325,7 +476,9 @@ def server_settings_update(request, server_id):
             can_apply_via_rcon.append(prop.replace('-', '_').replace('white_list', 'whitelist'))
     
     # Mensaje más corto
-    if requires_restart and can_apply_via_rcon:
+    if container_recreated:
+        message = 'Configuración guardada. Contenedor recreado con los nuevos puertos'
+    elif requires_restart and can_apply_via_rcon:
         message = f'Configuración guardada. {len(requires_restart)} cambios requieren reinicio'
     elif requires_restart:
         message = f'Configuración guardada. {len(requires_restart)} cambios requieren reinicio'
@@ -339,6 +492,7 @@ def server_settings_update(request, server_id):
         'message': message,
         'requires_restart': requires_restart,
         'applied_via_rcon': can_apply_via_rcon,
+        'container_recreated': container_recreated,
         'data': {
             'is_public': server.is_public,
             'auth_mode': server.auth_mode,

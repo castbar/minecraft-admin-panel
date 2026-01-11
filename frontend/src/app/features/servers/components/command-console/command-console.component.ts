@@ -18,12 +18,14 @@ interface CommandHistory {
   standalone: true,
   imports: [CommonModule, IonicModule, FormsModule],
   templateUrl: './command-console.component.html',
-  styleUrls: ['./command-console.component.scss']
+  styleUrls: ['./command-console.component.scss'],
 })
 export class CommandConsoleComponent implements OnInit {
   @Input() serverId!: number;
-  @ViewChild('commandInput', { static: false }) commandInput?: ElementRef<HTMLIonInputElement>;
-  @ViewChild('outputContainer', { static: false }) outputContainer?: ElementRef<HTMLDivElement>;
+  @ViewChild('commandInput', { static: false })
+  commandInput?: ElementRef<HTMLIonInputElement>;
+  @ViewChild('outputContainer', { static: false })
+  outputContainer?: ElementRef<HTMLDivElement>;
 
   command: string = '';
   history: CommandHistory[] = [];
@@ -43,7 +45,7 @@ export class CommandConsoleComponent implements OnInit {
       try {
         this.history = JSON.parse(saved).map((h: any) => ({
           ...h,
-          timestamp: new Date(h.timestamp)
+          timestamp: new Date(h.timestamp),
         }));
       } catch (e) {
         // Ignorar errores de parseo
@@ -61,9 +63,12 @@ export class CommandConsoleComponent implements OnInit {
       next: (response: any) => {
         const result: CommandHistory = {
           command: commandText,
-          output: response.data?.output || response.output || 'Comando ejecutado correctamente',
+          output:
+            response.data?.output ||
+            response.output ||
+            'Comando ejecutado correctamente',
           timestamp: new Date(),
-          success: response.success !== false
+          success: response.success !== false,
         };
 
         this.history.push(result);
@@ -87,7 +92,7 @@ export class CommandConsoleComponent implements OnInit {
           command: commandText,
           output: error.message || 'Error al ejecutar comando',
           timestamp: new Date(),
-          success: false
+          success: false,
         };
 
         this.history.push(result);
@@ -100,7 +105,7 @@ export class CommandConsoleComponent implements OnInit {
         this.isExecuting = false;
         this.scrollToBottom();
         this.toast.error('Error al ejecutar comando');
-      }
+      },
     });
   }
 
@@ -118,7 +123,10 @@ export class CommandConsoleComponent implements OnInit {
   }
 
   private saveHistory(): void {
-    localStorage.setItem(`command_history_${this.serverId}`, JSON.stringify(this.history));
+    localStorage.setItem(
+      `command_history_${this.serverId}`,
+      JSON.stringify(this.history)
+    );
   }
 
   private scrollToBottom(): void {
@@ -131,11 +139,10 @@ export class CommandConsoleComponent implements OnInit {
   }
 
   formatTimestamp(date: Date): string {
-    return date.toLocaleTimeString('es-ES', { 
-      hour: '2-digit', 
-      minute: '2-digit', 
-      second: '2-digit' 
+    return date.toLocaleTimeString('es-ES', {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
     });
   }
 }
-

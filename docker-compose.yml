@@ -61,6 +61,7 @@ services:
       - minecraft_data:/data
       - panel_static:/app/staticfiles
       - /var/run/docker.sock:/var/run/docker.sock
+      - ./panel:/app
     restart: unless-stopped
     # El entrypoint.sh maneja la inicialización
 

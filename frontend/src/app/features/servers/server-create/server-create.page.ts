@@ -21,10 +21,11 @@ import {
   IonList,
   IonIcon,
   IonNote,
+  IonSpinner,
   AlertController
 } from '@ionic/angular/standalone';
 import { addIcons } from 'ionicons';
-import { helpCircleOutline } from 'ionicons/icons';
+import { helpCircleOutline, addCircleOutline, trashOutline } from 'ionicons/icons';
 import { LoadingController } from '@ionic/angular';
 import { ServerService } from '../services/server.service';
 import { AuthService } from '../../../core/services/auth.service';
@@ -56,7 +57,8 @@ import { CreateServerRequest } from '../services/server.service';
     IonButton,
     IonList,
     IonIcon,
-    IonNote
+    IonNote,
+    IonSpinner
   ]
 })
 export class ServerCreatePage {
@@ -66,19 +68,25 @@ export class ServerCreatePage {
   } = {
     name: '',
     host: '',
-    port: 25565,
-    rcon_port: 25575,
+    port: 0, // 0 o null = auto-asignar puerto
+    rcon_port: 0, // 0 o null = auto-asignar puerto
     rcon_password: '',
     server_type: 'vanilla',
     version: 'latest',
     max_players: 20,
     difficulty: 'normal',
     pvp_enabled: false,
-    whitelist_enabled: true
+    whitelist_enabled: true,
+    additional_ports: []
   };
+  
+  autoAssignPorts = true; // Por defecto auto-asignar puertos
+
+  additionalPorts: Array<{ port: number; protocol: 'tcp' | 'udp'; host_port: number }> = [];
 
   recommendedMemory: { memory_limit_mb: number; java_heap_max_mb: number; java_heap_min_mb: number } | null = null;
   maxPlayersRecommended: number = 0;
+  isCreating = false;
 
   constructor(
     private serverService: ServerService,
@@ -88,8 +96,20 @@ export class ServerCreatePage {
     private loadingController: LoadingController,
     private alertController: AlertController
   ) {
-    addIcons({ helpCircleOutline });
+    addIcons({ helpCircleOutline, addCircleOutline, trashOutline });
     this.calculateRecommendedMemory();
+  }
+
+  addPort(): void {
+    this.additionalPorts.push({
+      port: 24454,
+      protocol: 'udp',
+      host_port: 24454
+    });
+  }
+
+  removePort(index: number): void {
+    this.additionalPorts.splice(index, 1);
   }
 
   calculateRecommendedMemory(): void {
@@ -155,6 +175,14 @@ export class ServerCreatePage {
     this.calculateRecommendedMemory();
   }
 
+  onAutoAssignToggle(): void {
+    // Si se desactiva auto-asignación, resetear puertos a valores por defecto
+    if (!this.autoAssignPorts) {
+      this.serverData.port = 0;
+      this.serverData.rcon_port = 0;
+    }
+  }
+
   async showMemoryHelp(type: 'total' | 'heap'): Promise<void> {
     const messages = {
       total: {
@@ -194,36 +222,35 @@ export class ServerCreatePage {
   }
 
   isFormValid(): boolean {
-    const isValid = !!(this.serverData.name && this.serverData.host && this.serverData.rcon_port && this.serverData.rcon_password);
-    console.log('isFormValid:', isValid, this.serverData);
-    return isValid;
+    return !!(this.serverData.name && this.serverData.host && this.serverData.rcon_port && this.serverData.rcon_password);
   }
 
   async createServer(): Promise<void> {
     try {
-      console.log('createServer called!', this.serverData);
-      
       // Validación mejorada con mensajes específicos
       if (!this.serverData.name) {
-        console.error('Validation failed: name is required');
         alert('❌ El nombre del servidor es requerido');
         return;
       }
 
       if (!this.serverData.host) {
-        console.error('Validation failed: host is required');
         alert('❌ El host es requerido (IP o nombre del contenedor)');
         return;
       }
 
-      if (!this.serverData.rcon_port || this.serverData.rcon_port < 1 || this.serverData.rcon_port > 65535) {
-        console.error('Validation failed: rcon_port is invalid');
-        alert('❌ El puerto RCON debe estar entre 1 y 65535');
-        return;
+      // Validar puertos solo si se especifican manualmente (no auto-asignación)
+      if (!this.autoAssignPorts) {
+        if (this.serverData.port && (this.serverData.port < 1 || this.serverData.port > 65535)) {
+          alert('❌ El puerto de Minecraft debe estar entre 1 y 65535');
+          return;
+        }
+        if (this.serverData.rcon_port && (this.serverData.rcon_port < 1 || this.serverData.rcon_port > 65535)) {
+          alert('❌ El puerto RCON debe estar entre 1 y 65535');
+          return;
+        }
       }
 
       if (!this.serverData.rcon_password) {
-        console.error('Validation failed: rcon_password is required');
         alert('❌ La contraseña RCON es requerida');
         return;
       }
@@ -231,24 +258,62 @@ export class ServerCreatePage {
       // Validar memoria si está configurada
       if (this.serverData.memory_limit_mb && this.serverData.java_heap_max_mb) {
         if (this.serverData.java_heap_max_mb >= this.serverData.memory_limit_mb) {
-          console.error('Validation failed: heap >= memory');
           alert('❌ El heap máximo debe ser menor que la memoria total (deja 200MB para el sistema)');
           return;
         }
       }
 
-      console.log('Validation passed, calling serverService.createServer...');
+      // Preparar puertos adicionales
+      const additionalPorts = this.additionalPorts
+        .filter(p => p.port > 0 && p.port <= 65535)
+        .map(p => ({
+          port: p.port,
+          protocol: p.protocol,
+          host_port: p.host_port || p.port
+        }));
 
-      this.serverService.createServer(this.serverData).subscribe({
+      // Preparar datos para enviar al backend
+      const requestData: any = {
+        ...this.serverData,
+        additional_ports: additionalPorts.length > 0 ? additionalPorts : undefined
+      };
+      
+      // Si auto-asignar puertos está activado, enviar 0 o null para que el backend los asigne
+      if (this.autoAssignPorts) {
+        requestData.port = null;
+        requestData.rcon_port = null;
+      } else {
+        // Si se especificaron manualmente, usar esos valores (o 0 si están vacíos)
+        if (!requestData.port || requestData.port === 0) {
+          requestData.port = null;
+        }
+        if (!requestData.rcon_port || requestData.rcon_port === 0) {
+          requestData.rcon_port = null;
+        }
+      }
+
+      this.isCreating = true;
+      this.serverService.createServer(requestData).subscribe({
         next: (response: any) => {
-          console.log('Server created successfully!', response);
+          this.isCreating = false;
           const serverId = response.server_id || response.data?.id || response.id || 1;
-          alert(`✅ Servidor "${this.serverData.name}" creado correctamente con ID: ${serverId}`);
+          
+          // Mostrar puertos asignados si fueron auto-asignados
+          let successMessage = `✅ Servidor "${this.serverData.name}" creado correctamente con ID: ${serverId}`;
+          if (this.autoAssignPorts && response.data) {
+            const assignedPort = response.data.port;
+            const assignedRconPort = response.data.rcon_port;
+            if (assignedPort || assignedRconPort) {
+              successMessage += `\n\nPuertos asignados automáticamente:\n• Minecraft: ${assignedPort || 'N/A'}\n• RCON: ${assignedRconPort || 'N/A'}`;
+            }
+          }
+          
+          alert(successMessage);
           this.authService.setCurrentServerId(serverId);
           this.router.navigate(['/dashboard']);
         },
         error: (error) => {
-          console.error('Error creating server:', error);
+          this.isCreating = false;
           // Mensajes de error más amigables
           let errorMessage = 'Error al crear servidor';
           
@@ -265,9 +330,7 @@ export class ServerCreatePage {
           alert(errorMessage);
         }
       });
-      console.log('Subscribe set up, waiting for response...');
     } catch (error) {
-      console.error('Exception in createServer:', error);
       alert('Error inesperado: ' + error);
     }
   }

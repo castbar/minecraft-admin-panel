@@ -39,7 +39,13 @@ import {
   settingsOutline,
   refreshOutline,
   trashOutline,
-  downloadOutline
+  downloadOutline,
+  documentTextOutline,
+  folderOutline,
+  arrowBackOutline,
+  cloudUploadOutline,
+  archiveOutline,
+  closeCircleOutline
 } from 'ionicons/icons';
 import { ModService } from '../services/mod.service';
 import { ModPoolService } from '../services/mod-pool.service';
@@ -47,6 +53,16 @@ import { AuthService } from '../../../core/services/auth.service';
 import { ServerService } from '../../servers/services/server.service';
 import { ToastService } from '../../../core/services/toast.service';
 import { Mod, ModPool, ModConfig } from '../../../shared/models';
+
+interface ConfigFile {
+  name: string;
+  path: string;
+  size?: number;
+  mod_name?: string;
+  format?: string;
+  relative_path?: string;
+  is_dir?: boolean;
+}
 
 @Component({
   selector: 'app-mod-list',
@@ -81,37 +97,31 @@ import { Mod, ModPool, ModConfig } from '../../../shared/models';
     IonSegmentButton,
     IonModal,
     IonTextarea,
-    IonButtons,
-    IonFab,
-    IonFabButton
+    IonButtons
   ]
 })
 export class ModListPage implements OnInit {
-  activeTab: 'installed' | 'pool' | 'configs' = 'installed';
+  activeTab: 'installed' | 'configs' = 'installed';
   
   // Installed mods
   installedMods: Mod[] = [];
   filteredInstalledMods: Mod[] = [];
   installedSearchTerm = '';
   
-  // Pool mods
-  poolMods: ModPool[] = [];
-  filteredPoolMods: ModPool[] = [];
-  poolSearchTerm = '';
-  categories: string[] = [];
-  selectedCategory = '';
-  selectedServerType = '';
-  
   // Configs
   modsWithConfig: Mod[] = [];
+  configFiles: ConfigFile[] = [];
   selectedModConfig: ModConfig | null = null;
+  selectedConfigFile: ConfigFile | null = null;
   configContent = '';
   configFormat: 'json' | 'yaml' | 'toml' | 'properties' | 'txt' = 'json';
   isConfigModalOpen = false;
+  currentConfigFilePath = '/data/config'; // Ruta actual para navegación
   
   loading = false;
   isUploadModalOpen = false;
   uploadFile: File | null = null;
+  uploadFiles: File[] = [];
   isUploading = false;
 
   constructor(
@@ -132,19 +142,26 @@ export class ModListPage implements OnInit {
       settingsOutline,
       refreshOutline,
       trashOutline,
-      downloadOutline
+      downloadOutline,
+      documentTextOutline,
+      folderOutline,
+      arrowBackOutline,
+      cloudUploadOutline,
+      archiveOutline,
+      closeCircleOutline
     });
   }
 
   ngOnInit(): void {
     this.loadInstalledMods();
-    this.loadPoolMods();
-    this.loadCategories();
   }
 
   onTabChange(value: any): void {
-    const validTabs: ('installed' | 'pool' | 'configs')[] = ['installed', 'pool', 'configs'];
+    const validTabs: ('installed' | 'configs')[] = ['installed', 'configs'];
     this.activeTab = validTabs.includes(value) ? value : 'installed';
+    if (this.activeTab === 'configs') {
+      this.loadConfigFiles();
+    }
   }
 
   // Installed Mods
@@ -198,8 +215,8 @@ export class ModListPage implements OnInit {
   }
 
   async uploadMod(): Promise<void> {
-    if (!this.uploadFile) {
-      this.toast.error('Selecciona un archivo');
+    if (this.uploadFiles.length === 0) {
+      this.toast.error('Selecciona al menos un archivo');
       return;
     }
 
@@ -207,20 +224,44 @@ export class ModListPage implements OnInit {
     if (!serverId) return;
 
     this.isUploading = true;
+    let uploadedCount = 0;
+    let failedCount = 0;
 
-    this.modService.uploadMod(serverId, this.uploadFile).subscribe({
-      next: () => {
-        this.isUploading = false;
-        this.toast.success('Mod subido correctamente');
-        this.isUploadModalOpen = false;
-        this.uploadFile = null;
-        this.loadInstalledMods();
-      },
-      error: () => {
-        this.isUploading = false;
-        this.toast.error('Error al subir mod');
+    // Subir archivos uno por uno
+    for (let i = 0; i < this.uploadFiles.length; i++) {
+      const file = this.uploadFiles[i];
+      
+      try {
+        await new Promise<void>((resolve, reject) => {
+          this.modService.uploadMod(serverId, file).subscribe({
+            next: () => {
+              uploadedCount++;
+              resolve();
+            },
+            error: (error) => {
+              failedCount++;
+              console.error(`Error al subir ${file.name}:`, error);
+              resolve(); // Continuar con el siguiente archivo
+            }
+          });
+        });
+      } catch (error) {
+        failedCount++;
+        console.error(`Error al subir ${file.name}:`, error);
       }
-    });
+    }
+
+    this.isUploading = false;
+    
+    if (uploadedCount > 0) {
+      this.toast.success(`${uploadedCount} archivo(s) subido(s) correctamente${failedCount > 0 ? `, ${failedCount} fallaron` : ''}`);
+    } else {
+      this.toast.error('Error al subir los archivos');
+    }
+    
+    this.isUploadModalOpen = false;
+    this.clearUploadFiles();
+    this.loadInstalledMods();
   }
 
   async toggleMod(mod: Mod): Promise<void> {
@@ -279,77 +320,126 @@ export class ModListPage implements OnInit {
     await alert.present();
   }
 
-  // Pool Mods
-  loadPoolMods(): void {
-    this.loading = true;
-    const params: any = {};
-    if (this.selectedCategory) params.category = this.selectedCategory;
-    if (this.selectedServerType) params.server_type = this.selectedServerType;
-    
-    // Si no hay tipo seleccionado, obtener el tipo del servidor actual
-    if (!this.selectedServerType) {
-      const serverId = this.authService.currentServerId;
-      if (serverId) {
-        // Cargar información del servidor para obtener su tipo
-        this.serverService.getServerSettings(serverId).subscribe({
-          next: (settings: any) => {
-            if (settings && settings.server_type) {
-              params.server_type = settings.server_type;
-            }
-            this.loadPoolModsWithParams(params);
-          },
-          error: () => {
-            // Si falla, cargar sin filtro de tipo
-            this.loadPoolModsWithParams(params);
-          }
-        });
-        return;
-      }
-    }
-    
-    this.loadPoolModsWithParams(params);
-  }
-  
-  private loadPoolModsWithParams(params: any): void {
-    this.modPoolService.getModsPool(params).subscribe({
-      next: (mods) => {
-        this.poolMods = mods;
-        this.filteredPoolMods = mods;
-        this.loading = false;
-      },
-      error: () => {
-        this.toast.error('Error al cargar pool de mods');
-        this.loading = false;
-      }
-    });
-  }
-
-  loadCategories(): void {
-    this.modPoolService.getCategories().subscribe({
-      next: (categories) => {
-        this.categories = categories;
-      },
-      error: () => {
-        // Ignorar error
-      }
-    });
-  }
-
-  onPoolSearch(event: any): void {
-    this.poolSearchTerm = event.detail.value || '';
-    this.filterPoolMods();
-  }
-
-  filterPoolMods(): void {
-    if (!this.poolSearchTerm.trim()) {
-      this.filteredPoolMods = this.poolMods;
+  // Config Files
+  loadConfigFiles(): void {
+    const serverId = this.authService.currentServerId;
+    if (!serverId) {
+      this.toast.error('No hay servidor seleccionado');
       return;
     }
-    const term = this.poolSearchTerm.toLowerCase();
-    this.filteredPoolMods = this.poolMods.filter(m =>
-      m.name.toLowerCase().includes(term) ||
-      (m.description && m.description.toLowerCase().includes(term))
-    );
+
+    this.loading = true;
+    const path = this.currentConfigFilePath || '/data/config';
+    this.modService.getConfigFiles(serverId, path).subscribe({
+      next: (response: any) => {
+        const files = response.data || response || [];
+        this.configFiles = files;
+        this.loading = false;
+      },
+      error: () => {
+        this.loading = false;
+        this.configFiles = [];
+      }
+    });
+  }
+
+  browseConfigFiles(): void {
+    // Resetear a la ruta raíz
+    this.currentConfigFilePath = '/data/config';
+    this.loadConfigFiles();
+  }
+
+  navigateUp(): void {
+    // Navegar hacia arriba en la jerarquía de directorios
+    if (this.currentConfigFilePath && this.currentConfigFilePath !== '/data/config') {
+      const parts = this.currentConfigFilePath.split('/').filter((p: string) => p);
+      if (parts.length > 2) { // Mantener al menos /data/config
+        parts.pop();
+        this.currentConfigFilePath = '/' + parts.join('/');
+      } else {
+        this.currentConfigFilePath = '/data/config';
+      }
+      this.loadConfigFiles();
+    }
+  }
+
+  openConfigFile(file: ConfigFile): void {
+    // Si es un directorio, navegar dentro de él
+    if (file.is_dir) {
+      this.currentConfigFilePath = file.path;
+      this.loadConfigFiles();
+      return;
+    }
+
+    const serverId = this.authService.currentServerId;
+    if (!serverId) {
+      this.toast.error('No hay servidor seleccionado');
+      return;
+    }
+
+    this.loading = true;
+    this.modService.readConfigFile(serverId, file.path).subscribe({
+      next: (response: any) => {
+        const data = response.data || response;
+        this.selectedConfigFile = file;
+        this.selectedModConfig = null; // Limpiar mod config cuando abrimos un archivo directo
+        this.configContent = data.content || '';
+        this.configFormat = (data.format || file.format || 'txt') as 'json' | 'yaml' | 'toml' | 'properties' | 'txt';
+        this.isConfigModalOpen = true;
+        this.loading = false;
+        this.cdr.detectChanges();
+      },
+      error: (error: any) => {
+        this.loading = false;
+        const errorMsg = error.error?.error || 'Error al leer archivo';
+        // Si el error indica que es un directorio, navegar dentro de él
+        if (error.error?.is_directory || errorMsg.includes('is a directory')) {
+          this.currentConfigFilePath = file.path;
+          this.loadConfigFiles();
+        } else {
+          this.toast.error(errorMsg);
+        }
+      }
+    });
+  }
+
+  formatFileSize(bytes?: number): string {
+    if (!bytes) return 'N/A';
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+  }
+
+  closeConfigModal(): void {
+    this.isConfigModalOpen = false;
+    this.selectedModConfig = null;
+    this.selectedConfigFile = null;
+    this.configContent = '';
+  }
+
+  async saveConfigFile(): Promise<void> {
+    if (!this.selectedConfigFile) return;
+
+    const serverId = this.authService.currentServerId;
+    if (!serverId) return;
+
+    // Validar formato antes de guardar
+    const validationError = this.validateConfigFormat(this.configContent, this.configFormat);
+    if (validationError) {
+      this.toast.error(validationError);
+      return;
+    }
+
+    this.modService.writeConfigFile(serverId, this.selectedConfigFile.path, this.configContent).subscribe({
+      next: () => {
+        this.toast.success('Archivo guardado correctamente');
+        this.closeConfigModal();
+        this.loadConfigFiles();
+      },
+      error: (error: any) => {
+        this.toast.error(error.error?.error || 'Error al guardar archivo');
+      }
+    });
   }
 
   // Configs
@@ -415,7 +505,7 @@ export class ModListPage implements OnInit {
     }).subscribe({
       next: () => {
         this.toast.success('Configuración guardada correctamente');
-        this.isConfigModalOpen = false;
+        this.closeConfigModal();
       },
       error: (error: any) => {
         this.toast.error(error.error?.error || 'Error al guardar configuración');
@@ -444,16 +534,44 @@ export class ModListPage implements OnInit {
           }
         }
       } else if (format === 'toml') {
-        // Validación básica de TOML
+        // Validación básica de TOML - más permisiva
+        // TOML permite líneas vacías, comentarios, secciones, arrays multilínea, etc.
+        // La validación real se hace en el backend con librerías TOML
+        // Aquí solo hacemos una validación muy básica
         const lines = content.split('\n');
+        let inMultilineString = false;
+        let multilineDelimiter = '';
+        
         for (const line of lines) {
           const trimmed = line.trim();
-          if (trimmed && !trimmed.startsWith('#') && !trimmed.startsWith('[')) {
-            if (!trimmed.includes('=')) {
-              // No es una línea válida de TOML
-              return 'Invalid TOML format: Each line should be a key=value pair or a section header [section]';
+          
+          // Ignorar líneas vacías
+          if (!trimmed) continue;
+          
+          // Detectar inicio de strings multilínea
+          if (trimmed.includes('"""') || trimmed.includes("'''")) {
+            inMultilineString = !inMultilineString;
+            if (inMultilineString) {
+              multilineDelimiter = trimmed.includes('"""') ? '"""' : "'''";
             }
+            continue;
           }
+          
+          // Si estamos dentro de un string multilínea, ignorar validación
+          if (inMultilineString) continue;
+          
+          // Ignorar comentarios
+          if (trimmed.startsWith('#')) continue;
+          
+          // Ignorar secciones [section] o [[array]]
+          if (trimmed.startsWith('[') && trimmed.endsWith(']')) continue;
+          
+          // Ignorar arrays inline [item1, item2]
+          if (trimmed.startsWith('[') && trimmed.includes(']')) continue;
+          
+          // Si la línea tiene '=' es probablemente válida
+          // Si no tiene '=' pero tampoco es ninguna de las anteriores, podría ser parte de un array multilínea
+          // En ese caso, confiamos en la validación del backend
         }
       } else if (format === 'properties') {
         // Validación básica de Properties
@@ -499,7 +617,7 @@ export class ModListPage implements OnInit {
               next: () => {
                 loading.dismiss();
                 this.toast.success('Configuración reseteada');
-                this.isConfigModalOpen = false;
+                this.closeConfigModal();
                 this.loadInstalledMods();
               },
               error: () => {
@@ -515,46 +633,41 @@ export class ModListPage implements OnInit {
   }
 
   onFileSelected(event: any): void {
-    const file = event.target.files[0];
-    if (file && file.name.endsWith('.jar')) {
-      this.uploadFile = file;
-    } else {
-      this.toast.error('Solo se permiten archivos .jar');
+    const files = Array.from(event.target.files || []) as File[];
+    const validFiles: File[] = [];
+    
+    for (const file of files) {
+      if (file.name.endsWith('.jar') || file.name.endsWith('.zip')) {
+        validFiles.push(file);
+      } else {
+        this.toast.error(`El archivo ${file.name} no es válido. Solo se permiten archivos .jar o .zip`);
+      }
     }
+    
+    if (validFiles.length > 0) {
+      this.uploadFiles = [...this.uploadFiles, ...validFiles];
+      // Mantener compatibilidad con uploadFile para un solo archivo
+      if (validFiles.length === 1) {
+        this.uploadFile = validFiles[0];
+      }
+    }
+  }
+
+  removeUploadFile(index: number): void {
+    this.uploadFiles.splice(index, 1);
+    if (this.uploadFiles.length === 0) {
+      this.uploadFile = null;
+    } else if (this.uploadFiles.length === 1) {
+      this.uploadFile = this.uploadFiles[0];
+    }
+  }
+
+  clearUploadFiles(): void {
+    this.uploadFiles = [];
+    this.uploadFile = null;
   }
 
   openDownload(url: string): void {
     window.open(url, '_blank');
-  }
-
-  async installFromPool(mod: ModPool): Promise<void> {
-    const serverId = this.authService.currentServerId;
-    if (!serverId) {
-      this.toast.error('No hay servidor seleccionado');
-      return;
-    }
-
-    const alert = await this.alertController.create({
-      header: 'Instalar Mod',
-      message: `¿Instalar ${mod.display_name || mod.name} en el servidor?`,
-      buttons: [
-        { text: 'Cancelar', role: 'cancel' },
-        {
-          text: 'Instalar',
-          handler: () => {
-            this.modPoolService.installMod(serverId, mod.id).subscribe({
-              next: () => {
-                this.toast.success(`${mod.display_name || mod.name} instalado correctamente`);
-                this.loadInstalledMods();
-              },
-              error: (error: any) => {
-                this.toast.error(error.error?.error || 'Error al instalar mod');
-              }
-            });
-          }
-        }
-      ]
-    });
-    await alert.present();
   }
 }

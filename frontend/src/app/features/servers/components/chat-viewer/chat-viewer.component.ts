@@ -85,7 +85,9 @@ export class ChatViewerComponent implements OnInit, OnDestroy, AfterViewChecked 
     // Formato real: 03:20:23[Not Secure] <Chrsx3> hola
     // O: [HH:MM:SS] [Server thread/INFO]: <player> mensaje
     const chatPatterns = [
-      // Patrón para formato: HH:MM:SS[Not Secure] <player> mensaje
+      // Patrón para formato: [HH:MM:SS] [Server thread/INFO]: [Not Secure] <player> mensaje
+      /\[(\d{2}:\d{2}:\d{2})\] \[Server thread\/INFO\]: \[Not Secure\] <([^>]+)> (.+)/,
+      // Patrón para formato: HH:MM:SS[Not Secure] <player> mensaje (sin brackets iniciales)
       /^(\d{2}:\d{2}:\d{2})\[Not Secure\] <([^>]+)> (.+)$/,
       // Patrón estándar: [HH:MM:SS] [Server thread/INFO]: <player> mensaje
       /\[(\d{2}:\d{2}:\d{2})\] \[Server thread\/INFO\]: <([^>]+)> (.+)/,

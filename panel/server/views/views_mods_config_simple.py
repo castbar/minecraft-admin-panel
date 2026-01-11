@@ -510,3 +510,300 @@ def mod_config_reset(request, server_id=None):
     except Exception as e:
         return JsonResponse({'success': False, 'error': str(e)}, status=500)
 
+
+@login_required
+@require_http_methods(["GET"])
+def config_files_list(request, server_id=None):
+    """
+    Lista archivos y directorios en una ruta específica dentro del contenedor del servidor.
+    
+    Query params:
+    - path: Ruta a explorar (ej: '/data/config', '/data/config/voicechat')
+    """
+    resolved_server_id = _get_server_id_from_request(request) or server_id
+    if not resolved_server_id:
+        return JsonResponse({'success': False, 'error': 'Server ID required'}, status=400)
+    
+    try:
+        server = get_object_or_404(Server, id=resolved_server_id, is_active=True)
+    except Server.DoesNotExist:
+        return JsonResponse({'success': False, 'error': 'Server not found'}, status=404)
+    
+    user_role = UserServerRole.objects.filter(user=request.user, server=server).first()
+    if not user_role or not user_role.has_permission('manage_mods'):
+        return JsonResponse({'success': False, 'error': 'Permission denied: manage_mods required'}, status=403)
+    
+    target_path = request.GET.get('path', '/data/config').strip()
+    if not target_path.startswith('/data/'):
+        return JsonResponse({'success': False, 'error': 'Invalid path. Must be within /data/'}, status=400)
+    
+    if server.container_name:
+        import docker
+        try:
+            client = docker.from_env()
+            container = client.containers.get(server.container_name)
+            
+            # Listar contenido del directorio
+            result = container.exec_run(f'ls -la {target_path}', user='minecraft')
+            if result.exit_code != 0:
+                return JsonResponse({'success': False, 'error': f'Error listing directory: {result.output.decode("utf-8")}'}, status=500)
+            
+            output_lines = result.output.decode('utf-8').splitlines()
+            files_info = []
+            
+            for line in output_lines:
+                if line.startswith('total') or not line.strip():
+                    continue
+                
+                # Parsear línea de ls -la
+                # Formato: permissions links owner group size date time name
+                # Ejemplo: drwxr-xr-x 2 minecraft minecraft 4096 Jan 11 15:00 voicechat
+                parts = line.split(None, 8)  # Dividir en máximo 9 partes para manejar espacios en nombres
+                if len(parts) < 9:
+                    continue
+                
+                permissions = parts[0]
+                try:
+                    size = int(parts[4])
+                except (ValueError, IndexError):
+                    size = 0
+                name = parts[8]  # El nombre puede tener espacios, así que tomamos todo lo que queda
+                
+                if name in ['.', '..']:
+                    continue
+                
+                is_dir = permissions.startswith('d')
+                
+                files_info.append({
+                    'name': name,
+                    'is_dir': is_dir,
+                    'size': size if not is_dir else 0,
+                    'path': os.path.join(target_path, name).replace('\\', '/')
+                })
+            
+            return JsonResponse({'success': True, 'data': files_info})
+        except docker.errors.NotFound:
+            return JsonResponse({'success': False, 'error': f'Container {server.container_name} not found'}, status=404)
+        except Exception as e:
+            return JsonResponse({'success': False, 'error': f'Error accessing container: {str(e)}'}, status=500)
+    else:
+        # Fallback para filesystem local (si no hay contenedor)
+        full_path = os.path.join(server.minecraft_data_path, target_path.replace('/data/', ''))
+        if not os.path.exists(full_path):
+            return JsonResponse({'success': False, 'error': 'Path not found on local filesystem'}, status=404)
+        
+        files_info = []
+        for name in os.listdir(full_path):
+            item_path = os.path.join(full_path, name)
+            is_dir = os.path.isdir(item_path)
+            size = os.path.getsize(item_path) if not is_dir else 0
+            files_info.append({
+                'name': name,
+                'is_dir': is_dir,
+                'size': size,
+                'path': os.path.join(target_path, name).replace('\\', '/')
+            })
+        return JsonResponse({'success': True, 'data': files_info})
+
+@login_required
+@require_http_methods(["GET"])
+def config_file_read(request, server_id=None):
+    """
+    Lee el contenido de un archivo específico dentro del contenedor del servidor.
+    
+    Query params:
+    - file_path: Ruta completa del archivo (ej: '/data/config/voicechat/voicechat-server.properties')
+    """
+    resolved_server_id = _get_server_id_from_request(request) or server_id
+    if not resolved_server_id:
+        return JsonResponse({'success': False, 'error': 'Server ID required'}, status=400)
+    
+    try:
+        server = get_object_or_404(Server, id=resolved_server_id, is_active=True)
+    except Server.DoesNotExist:
+        return JsonResponse({'success': False, 'error': 'Server not found'}, status=404)
+    
+    user_role = UserServerRole.objects.filter(user=request.user, server=server).first()
+    if not user_role or not user_role.has_permission('manage_mods'):
+        return JsonResponse({'success': False, 'error': 'Permission denied: manage_mods required'}, status=403)
+    
+    file_path = request.GET.get('file_path', '').strip()
+    if not file_path or not file_path.startswith('/data/'):
+        return JsonResponse({'success': False, 'error': 'Invalid file path. Must be within /data/'}, status=400)
+    
+    if server.container_name:
+        import docker
+        try:
+            client = docker.from_env()
+            container = client.containers.get(server.container_name)
+            
+            # Verificar si es un directorio antes de intentar leerlo (usar comillas para manejar espacios)
+            result = container.exec_run(f'sh -c \'test -d "{file_path}" && echo "dir" || echo "file"\'', user='minecraft')
+            is_directory = result.output.decode('utf-8').strip() == 'dir'
+            
+            if is_directory:
+                return JsonResponse({
+                    'success': False, 
+                    'error': f'{file_path} is a directory. Please specify a file path.',
+                    'is_directory': True
+                }, status=400)
+            
+            # Verificar que el archivo existe (usar comillas para manejar espacios en nombres)
+            # Primero verificar con root para ver si existe, luego intentar leer con minecraft
+            result_check = container.exec_run(f'sh -c \'test -f "{file_path}" && echo "exists" || echo ""\'', user='root')
+            if result_check.output.decode('utf-8').strip() != 'exists':
+                return JsonResponse({
+                    'success': False, 
+                    'error': f'File {file_path} does not exist'
+                }, status=404)
+            
+            # Intentar leer con minecraft primero, si falla intentar con root
+            result = container.exec_run(f'sh -c \'cat "{file_path}"\'', user='minecraft')
+            if result.exit_code != 0:
+                # Si falla con minecraft, intentar con root
+                result = container.exec_run(f'sh -c \'cat "{file_path}"\'', user='root')
+                # Si aún así falla, devolver error
+                if result.exit_code != 0:
+                    return JsonResponse({
+                        'success': False, 
+                        'error': f'Error reading file: {result.output.decode("utf-8").strip()}'
+                    }, status=500)
+            
+            if result.exit_code == 0:
+                content = result.output.decode('utf-8')
+                # Determinar formato basado en extensión
+                format_type = 'txt'
+                if file_path.endswith('.json'):
+                    format_type = 'json'
+                elif file_path.endswith('.toml'):
+                    format_type = 'toml'
+                elif file_path.endswith('.properties'):
+                    format_type = 'properties'
+                elif file_path.endswith('.yml') or file_path.endswith('.yaml'):
+                    format_type = 'yaml'
+                
+                return JsonResponse({'success': True, 'data': {'content': content, 'path': file_path, 'format': format_type}})
+            else:
+                error_msg = result.output.decode('utf-8').strip()
+                return JsonResponse({'success': False, 'error': f'Error reading file: {error_msg}'}, status=500)
+        except docker.errors.NotFound:
+            return JsonResponse({'success': False, 'error': f'Container {server.container_name} not found'}, status=404)
+        except Exception as e:
+            return JsonResponse({'success': False, 'error': f'Error accessing container: {str(e)}'}, status=500)
+    else:
+        # Fallback para filesystem local
+        full_path = os.path.join(server.minecraft_data_path, file_path.replace('/data/', ''))
+        if not os.path.exists(full_path):
+            return JsonResponse({'success': False, 'error': 'File not found on local filesystem'}, status=404)
+        
+        # Verificar si es un directorio
+        if os.path.isdir(full_path):
+            return JsonResponse({
+                'success': False, 
+                'error': f'{file_path} is a directory. Please specify a file path.',
+                'is_directory': True
+            }, status=400)
+        
+        with open(full_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        
+        # Determinar formato basado en extensión
+        format_type = 'txt'
+        if file_path.endswith('.json'):
+            format_type = 'json'
+        elif file_path.endswith('.toml'):
+            format_type = 'toml'
+        elif file_path.endswith('.properties'):
+            format_type = 'properties'
+        elif file_path.endswith('.yml') or file_path.endswith('.yaml'):
+            format_type = 'yaml'
+        
+        return JsonResponse({'success': True, 'data': {'content': content, 'path': file_path, 'format': format_type}})
+
+@csrf_exempt
+@login_required
+@require_http_methods(["POST"])
+def config_file_write(request, server_id=None):
+    """
+    Escribe contenido en un archivo específico dentro del contenedor del servidor.
+    
+    Body JSON:
+    {
+        "path": "/data/config/voicechat/voicechat-server.properties",
+        "content": "new_content_here",
+        "format": "properties" # Opcional, para validación
+    }
+    """
+    resolved_server_id = _get_server_id_from_request(request) or server_id
+    if not resolved_server_id:
+        return JsonResponse({'success': False, 'error': 'Server ID required'}, status=400)
+    
+    try:
+        server = get_object_or_404(Server, id=resolved_server_id, is_active=True)
+    except Server.DoesNotExist:
+        return JsonResponse({'success': False, 'error': 'Server not found'}, status=404)
+    
+    user_role = UserServerRole.objects.filter(user=request.user, server=server).first()
+    if not user_role or not user_role.has_permission('manage_mods'):
+        return JsonResponse({'success': False, 'error': 'Permission denied: manage_mods required'}, status=403)
+    
+    try:
+        data = json.loads(request.body)
+        # Aceptar tanto 'path' como 'file_path' para compatibilidad
+        file_path = data.get('path', data.get('file_path', '')).strip()
+        content = data.get('content', '')
+        config_format = data.get('format', 'txt') # Default a txt si no se especifica
+        
+        if not file_path or not file_path.startswith('/data/'):
+            return JsonResponse({'success': False, 'error': 'Invalid file path. Must be within /data/'}, status=400)
+        
+        # Validar formato si se especifica
+        validation_error = _validate_config_format(content, config_format)
+        if validation_error:
+            return JsonResponse({'success': False, 'error': validation_error}, status=400)
+        
+        if server.container_name:
+            import docker
+            import tarfile
+            
+            try:
+                client = docker.from_env()
+                container = client.containers.get(server.container_name)
+                
+                # Crear un archivo temporal en memoria y copiarlo al contenedor
+                tar_stream = io.BytesIO()
+                dir_path = os.path.dirname(file_path)
+                file_name = os.path.basename(file_path)
+                
+                with tarfile.open(fileobj=tar_stream, mode='w') as tar:
+                    tarinfo = tarfile.TarInfo(name=file_name)
+                    tarinfo.size = len(content.encode('utf-8'))
+                    tar.addfile(tarinfo, io.BytesIO(content.encode('utf-8')))
+                
+                tar_stream.seek(0)
+                
+                # Copiar archivo al contenedor del servidor usando put_archive
+                container.put_archive(dir_path, tar_stream.read())
+                
+                # Asegurar permisos correctos (usar comillas para manejar espacios)
+                container.exec_run(f'chown minecraft:minecraft "{file_path}"', user='root')
+                
+                return JsonResponse({'success': True, 'message': f'File {file_path} updated successfully'})
+            except docker.errors.NotFound:
+                return JsonResponse({'success': False, 'error': f'Container {server.container_name} not found'}, status=404)
+            except Exception as e:
+                return JsonResponse({'success': False, 'error': f'Error writing to container: {str(e)}'}, status=500)
+        else:
+            # Fallback para filesystem local
+            full_path = os.path.join(server.minecraft_data_path, file_path.replace('/data/', ''))
+            
+            # Crear directorio si no existe
+            os.makedirs(os.path.dirname(full_path), exist_ok=True)
+            
+            with open(full_path, 'w', encoding='utf-8') as f:
+                f.write(content)
+            return JsonResponse({'success': True, 'message': f'File {file_path} updated successfully'})
+    except json.JSONDecodeError:
+        return JsonResponse({'success': False, 'error': 'Invalid JSON in request body'}, status=400)
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)

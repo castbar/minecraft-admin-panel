@@ -3,6 +3,12 @@ import { Observable } from 'rxjs';
 import { ApiService } from '../../../core/services/api.service';
 import { Server, ServerStatus, ServerStats } from '../../../shared/models';
 
+export interface AdditionalPort {
+  port: number;
+  protocol: 'tcp' | 'udp';
+  host_port?: number;
+}
+
 export interface CreateServerRequest {
   name: string;
   host: string;
@@ -15,6 +21,7 @@ export interface CreateServerRequest {
   difficulty: 'peaceful' | 'easy' | 'normal' | 'hard';
   pvp_enabled: boolean;
   whitelist_enabled: boolean;
+  additional_ports?: AdditionalPort[];
 }
 
 export interface ServerControlAction {

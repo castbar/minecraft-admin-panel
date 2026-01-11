@@ -15,20 +15,39 @@
   background: var(--ion-color-primary);
   color: white;
   border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+  flex-wrap: wrap;
+  gap: 8px;
 
   h3 {
     margin: 0;
     font-size: 1.1rem;
     font-weight: 600;
+    flex: 1;
+    min-width: 0;
+    
+    @media (max-width: 576px) {
+      font-size: 1rem;
+      width: 100%;
+      margin-bottom: 4px;
+    }
   }
 
   .chat-actions {
     display: flex;
     gap: 8px;
+    flex-wrap: wrap;
+    flex-shrink: 0;
 
     ion-button {
       --color: white;
       margin: 0;
+      font-size: 12px;
+      
+      @media (max-width: 576px) {
+        flex: 1;
+        min-width: calc(33.333% - 6px);
+        font-size: 11px;
+      }
     }
   }
 }
@@ -82,7 +101,7 @@
 
   .chat-text {
     flex: 1;
-    color: var(--ion-text-color);
+    color: #ffffff;
   }
 }
 

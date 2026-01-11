@@ -31,7 +31,14 @@ import {
   stopOutline,
   settingsOutline,
   eyeOutline,
-  trashOutline
+  trashOutline,
+  star,
+  globeOutline,
+  pricetagOutline,
+  personOutline,
+  cubeOutline,
+  hardwareChipOutline,
+  timeOutline
 } from 'ionicons/icons';
 import { ServerService } from '../services/server.service';
 import { AuthService } from '../../../core/services/auth.service';
@@ -73,6 +80,7 @@ export class ServerListPage implements OnInit {
   filteredServers: Server[] = [];
   loading = true;
   searchTerm = '';
+  serverStatuses: { [serverId: number]: any } = {};
 
   constructor(
     private serverService: ServerService,
@@ -87,7 +95,14 @@ export class ServerListPage implements OnInit {
       stopOutline,
       settingsOutline,
       eyeOutline,
-      trashOutline
+      trashOutline,
+      star,
+      globeOutline,
+      pricetagOutline,
+      personOutline,
+      cubeOutline,
+      hardwareChipOutline,
+      timeOutline
     });
   }
 
@@ -102,11 +117,28 @@ export class ServerListPage implements OnInit {
         this.servers = servers;
         this.filteredServers = servers;
         this.loading = false;
+        // Cargar estados de los servidores
+        this.loadServerStatuses();
       },
       error: (error) => {
         this.toast.error('Error al cargar servidores');
         this.loading = false;
       }
+    });
+  }
+
+  loadServerStatuses(): void {
+    // Cargar estado de cada servidor
+    this.servers.forEach(server => {
+      this.serverService.getServerStatus(server.id).subscribe({
+        next: (status) => {
+          this.serverStatuses[server.id] = status;
+        },
+        error: () => {
+          // Si falla, marcar como offline
+          this.serverStatuses[server.id] = { is_running: false };
+        }
+      });
     });
   }
 
@@ -151,6 +183,19 @@ export class ServerListPage implements OnInit {
       'paper': 'Paper'
     };
     return labels[type] || type;
+  }
+
+  getServerTypeColor(type?: string): string {
+    if (!type) return 'medium';
+    const colors: { [key: string]: string } = {
+      'vanilla': 'primary',
+      'fabric': 'tertiary',
+      'forge': 'warning',
+      'bukkit': 'success',
+      'spigot': 'success',
+      'paper': 'success'
+    };
+    return colors[type] || 'medium';
   }
 
   getRoleLabel(role?: string): string {

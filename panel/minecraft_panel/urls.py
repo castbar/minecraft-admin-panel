@@ -52,6 +52,10 @@ urlpatterns = [
         path('servers/<int:server_id>/mods/config/', views_mods_config_simple.mod_config_get, name='mod_config_get'),
         path('servers/<int:server_id>/mods/config/update/', views_mods_config_simple.mod_config_update, name='mod_config_update'),
         path('servers/<int:server_id>/mods/config/reset/', views_mods_config_simple.mod_config_reset, name='mod_config_reset'),
+        # API para explorar archivos de configuración
+        path('servers/<int:server_id>/mods/config/files/', views_mods_config_simple.config_files_list, name='config_files_list'),
+        path('servers/<int:server_id>/mods/config/files/read/', views_mods_config_simple.config_file_read, name='config_file_read'),
+        path('servers/<int:server_id>/mods/config/files/write/', views_mods_config_simple.config_file_write, name='config_file_write'),
         
         # API de configuraciones de mods (plantillas globales)
         path('mods/templates/', views_mods_config.mod_templates_list, name='mod_templates_list'),
@@ -77,6 +81,7 @@ urlpatterns = [
         path('servers/<int:server_id>/logs/', views_api.server_logs, name='server_logs'),
         path('servers/<int:server_id>/control/<str:action>/', views_api.server_control, name='server_control'),
         path('servers/<int:server_id>/container/', views_docker.container_info, name='container_info'),
+        path('servers/<int:server_id>/container/create/', views_docker.create_container_for_server, name='create_container_for_server'),
         path('servers/<int:server_id>/whitelist/', views_api.whitelist_list, name='whitelist_list'),
         path('servers/<int:server_id>/whitelist/add/', views_api.whitelist_add, name='whitelist_add'),
         path('servers/<int:server_id>/whitelist/remove/', views_api.whitelist_remove, name='whitelist_remove'),

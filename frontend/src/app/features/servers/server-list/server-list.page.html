@@ -20,74 +20,123 @@
     <div *ngIf="filteredServers.length === 0" class="empty-state">
       <ion-icon name="server-outline" size="large"></ion-icon>
       <h2>No hay servidores</h2>
-      <p *ngIf="searchTerm">No se encontraron servidores que coincidan con la búsqueda</p>
-      <p *ngIf="!searchTerm">Crea tu primer servidor usando el botón +</p>
+      <p *ngIf="searchTerm">No se encontraron servidores que coincidan con la busqueda</p>
+      <p *ngIf="!searchTerm">Crea tu primer servidor usando el boton +</p>
     </div>
 
     <div class="servers-grid">
       <ion-card *ngFor="let server of filteredServers" class="server-card">
-        <ion-card-header>
-          <ion-card-title>
-            <ion-icon name="server-outline"></ion-icon>
-            {{ server.name }}
-            <ion-badge *ngIf="server.is_favorite" color="warning" style="margin-left: 8px;">
-              ⭐
-            </ion-badge>
-          </ion-card-title>
-        </ion-card-header>
+        <div class="card-header-section">
+          <div class="server-title-section">
+            <h2 class="server-name">
+              <ion-icon name="server-outline"></ion-icon>
+              {{ server.name }}
+            </h2>
+            <div class="server-badges">
+              <ion-badge *ngIf="server.is_favorite" color="warning" class="favorite-badge">
+                <ion-icon name="star"></ion-icon>
+              </ion-badge>
+              <ion-badge *ngIf="server.server_type" [color]="getServerTypeColor(server.server_type)" class="type-badge">
+                {{ getServerTypeLabel(server.server_type) }}
+              </ion-badge>
+            </div>
+          </div>
+          <div class="server-status-section">
+            <span class="status-indicator" [class.online]="serverStatuses[server.id]?.is_running" [class.offline]="!serverStatuses[server.id]?.is_running">
+              <span class="status-dot"></span>
+              {{ serverStatuses[server.id]?.is_running ? 'Online' : 'Offline' }}
+            </span>
+          </div>
+        </div>
+
         <ion-card-content>
-          <ion-list lines="none">
-            <ion-item>
-              <ion-label>
-                <h3>Host</h3>
-                <p>{{ server.host }}</p>
-              </ion-label>
-            </ion-item>
-            <ion-item *ngIf="server.role">
-              <ion-label>
-                <h3>Rol</h3>
-                <ion-badge [color]="getRoleColor(server.role)">
-                  {{ getRoleLabel(server.role) }}
-                </ion-badge>
-              </ion-label>
-            </ion-item>
-            <ion-item *ngIf="server.last_accessed">
-              <ion-label>
-                <h3>Último Acceso</h3>
-                <p>{{ formatDate(server.last_accessed) }}</p>
-              </ion-label>
-            </ion-item>
-            <ion-item *ngIf="server.is_hidden !== undefined">
-              <ion-label>
-                <h3>Visibilidad</h3>
-                <ion-badge [color]="server.is_hidden ? 'warning' : 'success'">
-                  {{ server.is_hidden ? 'Oculto' : 'Visible' }}
-                </ion-badge>
-              </ion-label>
-            </ion-item>
-          </ion-list>
+          <div class="server-info-grid">
+            <div class="info-row">
+              <span class="info-label">
+                <ion-icon name="globe-outline"></ion-icon>
+                Host
+              </span>
+              <span class="info-value">{{ server.host }}</span>
+            </div>
+            
+            <div class="info-row" *ngIf="server.minecraft_version">
+              <span class="info-label">
+                <ion-icon name="pricetag-outline"></ion-icon>
+                Version
+              </span>
+              <span class="info-value">{{ server.minecraft_version }}</span>
+            </div>
+            
+            <div class="info-row" *ngIf="server.role">
+              <span class="info-label">
+                <ion-icon name="person-outline"></ion-icon>
+                Rol
+              </span>
+              <ion-badge [color]="getRoleColor(server.role)" class="role-badge">
+                {{ getRoleLabel(server.role) }}
+              </ion-badge>
+            </div>
+            
+            <div class="info-row" *ngIf="server.container_name">
+              <span class="info-label">
+                <ion-icon name="cube-outline"></ion-icon>
+                Contenedor
+              </span>
+              <span class="info-value container-name">{{ server.container_name }}</span>
+            </div>
+            
+            <div class="info-row" *ngIf="server.memory_limit_mb">
+              <span class="info-label">
+                <ion-icon name="hardware-chip-outline"></ion-icon>
+                Memoria
+              </span>
+              <span class="info-value">{{ server.memory_limit_mb }} MB</span>
+            </div>
+            
+            <div class="info-row" *ngIf="server.last_accessed">
+              <span class="info-label">
+                <ion-icon name="time-outline"></ion-icon>
+                Ultimo Acceso
+              </span>
+              <span class="info-value">{{ formatDate(server.last_accessed) }}</span>
+            </div>
+            
+            <div class="info-row" *ngIf="server.is_hidden !== undefined">
+              <span class="info-label">
+                <ion-icon name="eye-outline"></ion-icon>
+                Visibilidad
+              </span>
+              <ion-badge [color]="server.is_hidden ? 'warning' : 'success'">
+                {{ server.is_hidden ? 'Oculto' : 'Visible' }}
+              </ion-badge>
+            </div>
+          </div>
 
           <div class="card-actions">
             <ion-button 
               fill="outline" 
               size="small"
-              (click)="viewServer(server)">
+              (click)="viewServer(server)"
+              class="action-button">
               <ion-icon name="eye-outline" slot="start"></ion-icon>
-              Ver Detalles
+              <span class="button-text">Ver</span>
             </ion-button>
             <ion-button 
               fill="solid" 
               size="small"
-              (click)="selectServer(server)">
+              (click)="selectServer(server)"
+              class="action-button primary">
               <ion-icon name="play-outline" slot="start"></ion-icon>
-              Seleccionar
+              <span class="button-text">Seleccionar</span>
             </ion-button>
             <ion-button 
               fill="clear" 
               size="small"
               color="danger"
-              (click)="deleteServer(server, $event)">
-              <ion-icon name="trash-outline" slot="icon-only"></ion-icon>
+              (click)="deleteServer(server, $event)"
+              class="delete-button"
+              title="Eliminar servidor">
+              <ion-icon name="trash-outline"></ion-icon>
             </ion-button>
           </div>
         </ion-card-content>
@@ -96,13 +145,8 @@
   </div>
 
   <ion-fab vertical="bottom" horizontal="end" slot="fixed">
-    <ion-fab-button>
+    <ion-fab-button routerLink="/servers/create">
       <ion-icon name="add-outline"></ion-icon>
     </ion-fab-button>
-    <ion-fab-list side="top">
-      <ion-fab-button routerLink="/servers/create">
-        <ion-icon name="server-outline"></ion-icon>
-      </ion-fab-button>
-    </ion-fab-list>
   </ion-fab>
 </ion-content>

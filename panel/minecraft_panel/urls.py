@@ -6,10 +6,24 @@ Django solo maneja APIs, admin y autenticación.
 """
 from django.contrib import admin
 from django.urls import path, include
+from django.shortcuts import redirect
 from django.contrib.auth import views as auth_views
 from server.views import views, views_api, views_settings, views_backup, views_auth, views_docker, views_versions, views_mods, views_mods_config, views_mods_config_simple, views_mods_pool, views_users
 
+def root_redirect(request):
+    """Redirige la raíz: siempre al frontend (Nginx lo maneja)"""
+    # El frontend se sirve desde Nginx, Django solo maneja APIs
+    # Si el usuario accede directamente a Django, redirigir al frontend
+    # Nginx ya maneja el routing del frontend en /
+    if request.path.startswith('/api/') or request.path.startswith('/admin/'):
+        # Si es una ruta de API o admin, dejar que Django la maneje
+        pass
+    # Para cualquier otra ruta, Nginx sirve el frontend
+    # Django solo responde a /api/ y /admin/
+
 urlpatterns = [
+    path('', root_redirect, name='root'),
+    # Admin solo accesible para usuarios staff (Django ya lo verifica automáticamente)
     path('admin/', admin.site.urls),
     
     # API endpoints (deben ir antes del catch-all del frontend)
@@ -120,6 +134,7 @@ urlpatterns = [
         path('users/<int:user_id>/update/', views_users.django_user_update, name='django_user_update'),
         path('users/<int:user_id>/delete/', views_users.django_user_delete, name='django_user_delete'),
         path('users/<int:user_id>/change-password/', views_users.django_user_change_password, name='django_user_change_password'),
+        path('users/set-password/', views_users.django_user_set_password, name='django_user_set_password'),
         path('users/<int:user_id>/roles/', views_users.user_roles_list, name='user_roles_list'),
         path('users/me/permissions/', views_users.user_permissions, name='user_permissions'),
         
@@ -136,8 +151,12 @@ urlpatterns = [
 ]
 
 
-# Servir archivos estáticos de Django (admin, etc.) - solo en modo DEBUG
+# Servir archivos estáticos de Django (admin, etc.)
+# En producción, WhiteNoise se encarga de servir los archivos estáticos
+# En desarrollo, Django los sirve directamente
 from django.conf import settings
-if settings.DEBUG:
-    from django.conf.urls.static import static
-    urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
+from django.conf.urls.static import static
+
+# WhiteNoise maneja los archivos estáticos en producción
+# En desarrollo también usamos WhiteNoise, pero Django puede servir directamente si es necesario
+# No agregar static() aquí porque WhiteNoise ya maneja todo

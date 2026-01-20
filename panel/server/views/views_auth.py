@@ -236,26 +236,25 @@ def api_check_auth(request):
             'error': 'Not authenticated'
         }, status=401)
     
-    # Obtener servidores disponibles para el usuario
-    user_servers = UserServerRole.objects.filter(user=request.user).select_related('server')
+    # Obtener servidores del usuario (solo los que es propietario)
+    user_servers = Server.objects.filter(owner=request.user, is_active=True)
     servers = []
-    for user_role in user_servers:
-        if user_role.server.is_active:
-            # Obtener información de sesión guardada
-            session = ServerSession.objects.filter(
-                user=request.user,
-                server=user_role.server
-            ).first()
-            
-            servers.append({
-                'id': user_role.server.id,
-                'name': user_role.server.name,
-                'host': user_role.server.host,
-                'role': user_role.role,
-                'is_hidden': user_role.server.is_hidden,
-                'last_accessed': session.last_accessed.isoformat() if session else None,
-                'is_favorite': session.is_favorite if session else False,
-            })
+    for server in user_servers:
+        # Obtener información de sesión guardada
+        session = ServerSession.objects.filter(
+            user=request.user,
+            server=server
+        ).first()
+        
+        servers.append({
+            'id': server.id,
+            'name': server.name,
+            'host': server.host,
+            'role': 'owner',  # El propietario siempre tiene rol owner
+            'is_hidden': server.is_hidden,
+            'last_accessed': session.last_accessed.isoformat() if session else None,
+            'is_favorite': session.is_favorite if session else False,
+        })
     
     return JsonResponse({
         'success': True,

@@ -22,6 +22,10 @@ def _get_rcon_connection(server):
     """Conectar a RCON para un servidor específico - Usa subprocess para evitar problemas con signals en threads"""
     import subprocess
     import socket
+    from ..utils.encryption import decrypt_password
+    
+    # Obtener contraseña desencriptada
+    rcon_password = server.get_rcon_password()
     
     class RconWrapper:
         """Wrapper para RCON que usa subprocess para evitar problemas con signals"""
@@ -170,14 +174,14 @@ def _get_rcon_connection(server):
             self.connected = False
     
     try:
-        # Log para debugging
+        # Log para debugging (no mostrar contraseña)
         print(f"🔌 Intentando conectar RCON: host={server.host}, port={server.rcon_port}")
         
         # Si el host es un nombre de contenedor Docker, usar ese nombre directamente
         # Si es una IP, usar la IP
         host = server.host
         
-        rcon = RconWrapper(host, server.rcon_port, server.rcon_password)
+        rcon = RconWrapper(host, server.rcon_port, rcon_password)
         if rcon.connect():
             print(f"✅ RCON conectado exitosamente a {server.name} (host: {host})")
             return rcon
@@ -194,36 +198,43 @@ def _get_rcon_connection(server):
 @login_required
 @require_http_methods(["GET"])
 def servers_list(request):
-    """Listar servidores disponibles para el usuario"""
+    """Listar servidores del usuario (solo los que es propietario)"""
     from ..models.models_multi import ServerSession
     
     # Detectar si el cliente está en la misma red/VPN
     client_ip = _get_client_ip(request)
     is_local_network = _is_local_network(client_ip)
     
-    user_servers = UserServerRole.objects.filter(user=request.user).select_related('server')
+    # Filtrar solo servidores del usuario (owner)
+    user_owned_servers = Server.objects.filter(
+        owner=request.user,
+        is_active=True
+    ).order_by('-created_at')
+    
     servers = []
-    for user_role in user_servers:
-        if user_role.server.is_active:
-            # Si el servidor está oculto, solo mostrarlo si está en la misma red
-            if user_role.server.is_hidden and not is_local_network:
-                continue
-            
-            # Obtener información de sesión guardada
-            session = ServerSession.objects.filter(
-                user=request.user,
-                server=user_role.server
-            ).first()
-            
-            servers.append({
-                'id': user_role.server.id,
-                'name': user_role.server.name,
-                'host': user_role.server.host,
-                'role': user_role.role,
-                'is_hidden': user_role.server.is_hidden,
-                'last_accessed': session.last_accessed.isoformat() if session else None,
-                'is_favorite': session.is_favorite if session else False,
-            })
+    for server in user_owned_servers:
+        # Si el servidor está oculto, solo mostrarlo si está en la misma red
+        if server.is_hidden and not is_local_network:
+            continue
+        
+        # Obtener información de sesión guardada
+        session = ServerSession.objects.filter(
+            user=request.user,
+            server=server
+        ).first()
+        
+        servers.append({
+            'id': server.id,
+            'name': server.name,
+            'host': server.host,
+            'role': 'owner',  # El propietario siempre tiene rol owner
+            'is_hidden': server.is_hidden,
+            'is_public': server.is_public,
+            'auth_mode': server.auth_mode,
+            'last_accessed': session.last_accessed.isoformat() if session else None,
+            'is_favorite': session.is_favorite if session else False,
+            'created_at': server.created_at.isoformat(),
+        })
     
     # Ordenar por último acceso o favoritos
     servers.sort(key=lambda x: (
@@ -778,14 +789,14 @@ def server_stats(request, server_id=None):
     })
 
 def _check_server_permission(request, server_id, permission_needed):
+    """Verificar que el usuario es propietario del servidor"""
+    from ..utils.permissions import check_server_ownership
     server = get_object_or_404(Server, id=server_id, is_active=True)
-    user_role = UserServerRole.objects.filter(user=request.user, server=server).first()
     
-    if not user_role:
-        return None, JsonResponse({'success': False, 'error': 'No access to this server'}, status=403)
-    
-    if not user_role.has_permission(permission_needed):
-        return None, JsonResponse({'success': False, 'error': f'Permission denied: {permission_needed} required'}, status=403)
+    # Verificar ownership
+    is_owner, error_response = check_server_ownership(request, server)
+    if not is_owner:
+        return None, error_response
     
     return server, None
 
@@ -933,16 +944,11 @@ def whitelist_add(request, server_id=None):
     except:
         return JsonResponse({'success': False, 'error': 'Server not found'}, status=404)
     
-    user_role = UserServerRole.objects.filter(
-        user=request.user,
-        server=server
-    ).first()
-    
-    if not user_role:
-        return JsonResponse({'success': False, 'error': 'No access to this server'}, status=403)
-    
-    if not user_role.has_permission('manage_whitelist'):
-        return JsonResponse({'success': False, 'error': 'Permission denied: manage_whitelist required'}, status=403)
+    # Verificar que el usuario es propietario del servidor
+    from ..utils.permissions import check_server_ownership
+    is_owner, error_response = check_server_ownership(request, server)
+    if not is_owner:
+        return error_response
     
     data = json.loads(request.body)
     username = data.get('username', '').strip()
@@ -958,10 +964,19 @@ def whitelist_add(request, server_id=None):
         }, status=500)
     
     try:
+        import logging
+        logger = logging.getLogger('server')
+        logger.info(f"Intentando agregar usuario '{username}' a whitelist del servidor {server.name} (ID: {server.id})")
         response = rcon.command(f'whitelist add {username}')
+        logger.info(f"Respuesta RCON al agregar '{username}': {response}")
         send_notification(server, 'whitelist_change', f"Usuario '{username}' agregado a whitelist.")
         return JsonResponse({'success': True, 'message': f'User {username} added', 'response': response})
     except Exception as e:
+        import logging
+        import traceback
+        logger = logging.getLogger('server')
+        logger.error(f"Error al agregar '{username}' a whitelist del servidor {server.name}: {str(e)}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
         send_notification(server, 'rcon_error', f"Error al agregar {username} a whitelist: {e}")
         return JsonResponse({'success': False, 'error': str(e)}, status=500)
     finally:
@@ -991,16 +1006,11 @@ def whitelist_remove(request, server_id=None):
     except:
         return JsonResponse({'success': False, 'error': 'Server not found'}, status=404)
     
-    user_role = UserServerRole.objects.filter(
-        user=request.user,
-        server=server
-    ).first()
-    
-    if not user_role:
-        return JsonResponse({'success': False, 'error': 'No access to this server'}, status=403)
-    
-    if not user_role.has_permission('manage_whitelist'):
-        return JsonResponse({'success': False, 'error': 'Permission denied: manage_whitelist required'}, status=403)
+    # Verificar que el usuario es propietario del servidor
+    from ..utils.permissions import check_server_ownership
+    is_owner, error_response = check_server_ownership(request, server)
+    if not is_owner:
+        return error_response
     
     data = json.loads(request.body)
     username = data.get('username', '').strip()
@@ -1016,10 +1026,19 @@ def whitelist_remove(request, server_id=None):
         }, status=500)
     
     try:
+        import logging
+        logger = logging.getLogger('server')
+        logger.info(f"Intentando eliminar usuario '{username}' de whitelist del servidor {server.name} (ID: {server.id})")
         response = rcon.command(f'whitelist remove {username}')
+        logger.info(f"Respuesta RCON al eliminar '{username}': {response}")
         send_notification(server, 'whitelist_change', f"Usuario '{username}' eliminado de whitelist.")
         return JsonResponse({'success': True, 'message': f'User {username} removed', 'response': response})
     except Exception as e:
+        import logging
+        import traceback
+        logger = logging.getLogger('server')
+        logger.error(f"Error al eliminar '{username}' de whitelist del servidor {server.name}: {str(e)}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
         send_notification(server, 'rcon_error', f"Error al eliminar {username} de whitelist: {e}")
         return JsonResponse({'success': False, 'error': str(e)}, status=500)
     finally:
@@ -1042,15 +1061,14 @@ def whitelist_list(request, server_id=None):
             'error': 'Server ID required. Send header X-Server-ID: <id>'
         }, status=400)
     
-    # Obtener servidor y verificar permisos
+    # Obtener servidor y verificar ownership
     server = get_object_or_404(Server, id=resolved_server_id, is_active=True)
-    user_role = UserServerRole.objects.filter(
-        user=request.user,
-        server=server
-    ).first()
     
-    if not user_role:
-        return JsonResponse({'success': False, 'error': 'Permission denied'}, status=403)
+    # Verificar que el usuario es propietario del servidor
+    from ..utils.permissions import check_server_ownership
+    is_owner, error_response = check_server_ownership(request, server)
+    if not is_owner:
+        return error_response
     
     # Intentar obtener whitelist vía RCON primero (más confiable)
     rcon = _get_rcon_connection(server)

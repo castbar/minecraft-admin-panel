@@ -35,6 +35,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',  # Servir archivos estáticos en producción
     'django.contrib.sessions.middleware.SessionMiddleware',
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -110,11 +111,21 @@ USE_TZ = True
 STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
+# WhiteNoise para servir archivos estáticos en producción
+# Usar CompressedManifestStaticFilesStorage para producción
+# Esto genera archivos con hash en el nombre para cache busting
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+
+# Configuración adicional de WhiteNoise
+WHITENOISE_USE_FINDERS = True  # Permitir buscar archivos estáticos en STATICFILES_DIRS
+WHITENOISE_AUTOREFRESH = True  # Recargar archivos en desarrollo
+
 # NOTA: El frontend se sirve desde Nginx (servicio separado)
 # Django solo maneja archivos estáticos del admin y panel interno
-STATICFILES_DIRS = [
-    BASE_DIR / 'static',
-]
+# Solo agregar STATICFILES_DIRS si el directorio existe
+STATICFILES_DIRS = []
+if os.path.exists(BASE_DIR / 'static'):
+    STATICFILES_DIRS.append(BASE_DIR / 'static')
 
 # Admin customization
 ADMIN_SITE_HEADER = "Minecraft Server Manager"
@@ -167,17 +178,79 @@ CSRF_TRUSTED_ORIGINS = [
 ]
 
 # Email Configuration
-# Por defecto usar console backend para desarrollo (imprime emails en consola)
-# Para producción, configurar EMAIL_BACKEND=smtp en variables de entorno
-EMAIL_BACKEND = os.environ.get('EMAIL_BACKEND', 'django.core.mail.backends.console.EmailBackend')
-EMAIL_HOST = os.environ.get('EMAIL_HOST', 'smtp.gmail.com')
-EMAIL_PORT = int(os.environ.get('EMAIL_PORT', '587'))
-EMAIL_USE_TLS = os.environ.get('EMAIL_USE_TLS', 'True') == 'True'
-EMAIL_USE_SSL = os.environ.get('EMAIL_USE_SSL', 'False') == 'True'
-EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', '')
-EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
-DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', EMAIL_HOST_USER or 'noreply@minecraft-panel.local')
+# Soporta múltiples nombres de variables para compatibilidad con diferentes sistemas
+# Variables estándar Django: EMAIL_HOST, EMAIL_HOST_USER, EMAIL_HOST_PASSWORD
+# Variables alternativas: SMTP_HOST, SMTP_USER, SMTP_PASSWORD
+# Variables del servidor: EMAIL_USER (para iCloud puede usarse como usuario SMTP)
+
+# Backend: usar SMTP si está configurado, sino console para desarrollo
+email_backend_env = os.environ.get('EMAIL_BACKEND') or os.environ.get('SMTP_BACKEND')
+if email_backend_env:
+    EMAIL_BACKEND = email_backend_env
+elif os.environ.get('SMTP_HOST') or os.environ.get('EMAIL_HOST'):
+    EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+else:
+    EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+
+# Host SMTP (soporta EMAIL_HOST, SMTP_HOST, o detectar desde EMAIL_USER)
+smtp_host = os.environ.get('EMAIL_HOST') or os.environ.get('SMTP_HOST')
+if not smtp_host:
+    # Detectar host SMTP desde el email del usuario (si es iCloud)
+    email_user = os.environ.get('EMAIL_USER') or os.environ.get('EMAIL_HOST_USER') or os.environ.get('SMTP_USER') or ''
+    if '@icloud.com' in email_user or '@me.com' in email_user:
+        smtp_host = 'smtp.mail.me.com'  # SMTP de iCloud
+    elif '@gmail.com' in email_user:
+        smtp_host = 'smtp.gmail.com'
+    else:
+        smtp_host = 'smtp.gmail.com'  # Default
+EMAIL_HOST = smtp_host
+
+# Puerto SMTP (soporta EMAIL_PORT, SMTP_PORT, o detectar desde host)
+email_port = os.environ.get('EMAIL_PORT') or os.environ.get('SMTP_PORT')
+if not email_port:
+    # Detectar puerto según el host
+    if 'mail.me.com' in EMAIL_HOST or 'icloud' in EMAIL_HOST:
+        email_port = '587'  # iCloud SMTP
+    else:
+        email_port = '587'  # Default TLS
+EMAIL_PORT = int(email_port)
+
+# TLS/SSL (soporta EMAIL_USE_TLS, SMTP_USE_TLS, o detectar)
+email_use_tls = os.environ.get('EMAIL_USE_TLS') or os.environ.get('SMTP_USE_TLS')
+if not email_use_tls:
+    email_use_tls = 'True'  # Default TLS
+EMAIL_USE_TLS = email_use_tls == 'True'
+EMAIL_USE_SSL = (os.environ.get('EMAIL_USE_SSL') or os.environ.get('SMTP_USE_SSL') or 'False') == 'True'
+
+# Usuario SMTP (soporta EMAIL_HOST_USER, SMTP_USER, EMAIL_USER)
+EMAIL_HOST_USER = (
+    os.environ.get('EMAIL_HOST_USER') or 
+    os.environ.get('SMTP_USER') or 
+    os.environ.get('EMAIL_USER') or 
+    ''
+)
+
+# Contraseña SMTP (soporta EMAIL_HOST_PASSWORD, SMTP_PASSWORD, EMAIL_PASSWORD)
+EMAIL_HOST_PASSWORD = (
+    os.environ.get('EMAIL_HOST_PASSWORD') or 
+    os.environ.get('SMTP_PASSWORD') or 
+    os.environ.get('EMAIL_PASSWORD') or 
+    ''
+)
+
+# Email remitente (soporta DEFAULT_FROM_EMAIL, EMAIL_FROM_EMAIL, EMAIL_FROM, SMTP_FROM)
+# Si no se especifica, usar el mismo que EMAIL_HOST_USER (requerido para algunos proveedores como iCloud)
+default_from_env = (
+    os.environ.get('DEFAULT_FROM_EMAIL') or 
+    os.environ.get('EMAIL_FROM_EMAIL') or 
+    os.environ.get('EMAIL_FROM') or 
+    os.environ.get('SMTP_FROM')
+)
+DEFAULT_FROM_EMAIL = default_from_env or EMAIL_HOST_USER or 'noreply@minecraft-panel.local'
 SERVER_EMAIL = DEFAULT_FROM_EMAIL
+
+# Nombre del remitente (opcional)
+EMAIL_FROM_NAME = os.environ.get('EMAIL_FROM_NAME') or 'Minecraft Server Manager'
 
 # URL base para links en emails (usado en templates)
 SITE_URL = os.environ.get('SITE_URL', 'http://localhost:8000')
@@ -186,4 +259,56 @@ SITE_URL = os.environ.get('SITE_URL', 'http://localhost:8000')
 DATA_UPLOAD_MAX_MEMORY_SIZE = 200 * 1024 * 1024  # 200MB
 FILE_UPLOAD_MAX_MEMORY_SIZE = 200 * 1024 * 1024  # 200MB
 DATA_UPLOAD_MAX_NUMBER_FIELDS = 10000
+
+# Logging Configuration
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '{levelname} {asctime} {module} {process:d} {thread:d} {message}',
+            'style': '{',
+        },
+        'simple': {
+            'format': '{levelname} {message}',
+            'style': '{',
+        },
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'verbose',
+        },
+        'file': {
+            'class': 'logging.FileHandler',
+            'filename': '/data/logs/django.log',
+            'formatter': 'verbose',
+        },
+    },
+    'root': {
+        'handlers': ['console', 'file'],
+        'level': 'INFO',
+    },
+    'loggers': {
+        'django': {
+            'handlers': ['console', 'file'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'django.request': {
+            'handlers': ['console', 'file'],
+            'level': 'ERROR',
+            'propagate': False,
+        },
+        'server': {
+            'handlers': ['console', 'file'],
+            'level': 'DEBUG',
+            'propagate': False,
+        },
+    },
+}
+
+# Crear directorio de logs si no existe
+import os
+os.makedirs('/data/logs', exist_ok=True)
 

@@ -25,7 +25,7 @@ import {
   AlertController
 } from '@ionic/angular/standalone';
 import { addIcons } from 'ionicons';
-import { helpCircleOutline, addCircleOutline, trashOutline } from 'ionicons/icons';
+import { helpCircleOutline, addCircleOutline, trashOutline, bugOutline } from 'ionicons/icons';
 import { LoadingController } from '@ionic/angular';
 import { ServerService } from '../services/server.service';
 import { AuthService } from '../../../core/services/auth.service';
@@ -80,6 +80,7 @@ export class ServerCreatePage {
     additional_ports: []
   };
   
+  
   autoAssignPorts = true; // Por defecto auto-asignar puertos
 
   additionalPorts: Array<{ port: number; protocol: 'tcp' | 'udp'; host_port: number }> = [];
@@ -96,7 +97,7 @@ export class ServerCreatePage {
     private loadingController: LoadingController,
     private alertController: AlertController
   ) {
-    addIcons({ helpCircleOutline, addCircleOutline, trashOutline });
+    addIcons({ helpCircleOutline, addCircleOutline, trashOutline, bugOutline });
     this.calculateRecommendedMemory();
   }
 
@@ -181,6 +182,167 @@ export class ServerCreatePage {
       this.serverData.port = 0;
       this.serverData.rcon_port = 0;
     }
+    this.onFieldChange();
+  }
+  
+  onFieldChange(): void {
+    // Este método se llama cuando cambian los campos
+    // Angular debería detectar los cambios automáticamente con ngModel
+    // El botón se actualiza automáticamente porque usa [disabled]="!isFormValid()"
+  }
+  
+  debugValidation(): void {
+    console.log('=== DEBUG VALIDACIÓN DEL FORMULARIO ===');
+    console.log('Estado completo del formulario:', JSON.stringify(this.serverData, null, 2));
+    console.log('Auto-asignar puertos:', this.autoAssignPorts);
+    console.log('Puertos adicionales:', this.additionalPorts);
+    console.log('');
+    
+    // Validar cada campo individualmente
+    const checks: { field: string; valid: boolean; value: any; reason?: string }[] = [];
+    
+    // Nombre
+    const hasName = !!(this.serverData.name && this.serverData.name.trim());
+    checks.push({
+      field: 'Nombre',
+      valid: hasName,
+      value: this.serverData.name,
+      reason: hasName ? undefined : 'Nombre vacío o solo espacios'
+    });
+    
+    // Host
+    const hasHost = !!(this.serverData.host && this.serverData.host.trim());
+    checks.push({
+      field: 'Host',
+      valid: hasHost,
+      value: this.serverData.host,
+      reason: hasHost ? undefined : 'Host vacío o solo espacios'
+    });
+    
+    // Contraseña RCON
+    const hasRconPassword = !!(this.serverData.rcon_password && this.serverData.rcon_password.trim());
+    checks.push({
+      field: 'Contraseña RCON',
+      valid: hasRconPassword,
+      value: '***' + (this.serverData.rcon_password ? ' (tiene valor)' : ' (vacío)'),
+      reason: hasRconPassword ? undefined : 'Contraseña RCON vacía o solo espacios'
+    });
+    
+    // Puertos (solo si auto-asignar está desactivado)
+    if (!this.autoAssignPorts) {
+      if (this.serverData.port) {
+        const portValid = this.serverData.port >= 1 && this.serverData.port <= 65535;
+        checks.push({
+          field: 'Puerto Minecraft',
+          valid: portValid,
+          value: this.serverData.port,
+          reason: portValid ? undefined : `Puerto fuera de rango (1-65535): ${this.serverData.port}`
+        });
+      }
+      
+      if (this.serverData.rcon_port) {
+        const rconPortValid = this.serverData.rcon_port >= 1 && this.serverData.rcon_port <= 65535;
+        checks.push({
+          field: 'Puerto RCON',
+          valid: rconPortValid,
+          value: this.serverData.rcon_port,
+          reason: rconPortValid ? undefined : `Puerto fuera de rango (1-65535): ${this.serverData.rcon_port}`
+        });
+      }
+    } else {
+      checks.push({
+        field: 'Puertos',
+        valid: true,
+        value: 'Auto-asignar activado',
+        reason: undefined
+      });
+    }
+    
+    // Memoria
+    if (this.serverData.memory_limit_mb) {
+      const memoryValid = this.serverData.memory_limit_mb >= 1024 && this.serverData.memory_limit_mb <= 16384;
+      checks.push({
+        field: 'Memoria Total',
+        valid: memoryValid,
+        value: this.serverData.memory_limit_mb,
+        reason: memoryValid ? undefined : `Memoria fuera de rango (1024-16384): ${this.serverData.memory_limit_mb}`
+      });
+      
+      if (this.serverData.java_heap_max_mb) {
+        const heapValid = this.serverData.java_heap_max_mb >= 512 && 
+                         this.serverData.java_heap_max_mb < this.serverData.memory_limit_mb;
+        checks.push({
+          field: 'Heap Máximo Java',
+          valid: heapValid,
+          value: this.serverData.java_heap_max_mb,
+          reason: heapValid ? undefined : 
+            `Heap inválido: debe ser >= 512 y < ${this.serverData.memory_limit_mb}, actual: ${this.serverData.java_heap_max_mb}`
+        });
+      }
+    }
+    
+    // Max jugadores
+    if (this.serverData.max_players !== undefined && this.serverData.max_players !== null) {
+      const maxPlayersValid = this.serverData.max_players >= 1 && this.serverData.max_players <= 100;
+      checks.push({
+        field: 'Max Jugadores',
+        valid: maxPlayersValid,
+        value: this.serverData.max_players,
+        reason: maxPlayersValid ? undefined : `Max jugadores fuera de rango (1-100): ${this.serverData.max_players}`
+      });
+    }
+    
+    // Puertos adicionales
+    this.additionalPorts.forEach((port, index) => {
+      if (port.port && port.port > 0) {
+        const portValid = port.port >= 1 && port.port <= 65535;
+        const protocolValid = port.protocol === 'tcp' || port.protocol === 'udp';
+        checks.push({
+          field: `Puerto Adicional ${index + 1}`,
+          valid: portValid && protocolValid,
+          value: `${port.port} (${port.protocol})`,
+          reason: !portValid ? `Puerto fuera de rango: ${port.port}` : 
+                  !protocolValid ? `Protocolo inválido: ${port.protocol}` : undefined
+        });
+      }
+    });
+    
+    // Mostrar resultados
+    console.log('RESULTADOS DE VALIDACIÓN:');
+    console.log('========================');
+    checks.forEach(check => {
+      const icon = check.valid ? '✅' : '❌';
+      console.log(`${icon} ${check.field}: ${check.valid ? 'VÁLIDO' : 'INVÁLIDO'}`);
+      console.log(`   Valor: ${check.value}`);
+      if (check.reason) {
+        console.log(`   Razón: ${check.reason}`);
+      }
+    });
+    
+    console.log('');
+    const allValid = checks.every(c => c.valid);
+    const invalidFields = checks.filter(c => !c.valid);
+    
+    console.log(`RESULTADO FINAL: ${allValid ? '✅ FORMULARIO VÁLIDO' : '❌ FORMULARIO INVÁLIDO'}`);
+    if (invalidFields.length > 0) {
+      console.log('');
+      console.log('CAMPOS QUE INVALIDAN EL FORMULARIO:');
+      invalidFields.forEach(field => {
+        console.log(`  ❌ ${field.field}: ${field.reason}`);
+      });
+    }
+    
+    console.log('');
+    console.log('Llamada a isFormValid():', this.isFormValid());
+    console.log('===========================================');
+    
+    // Mostrar también en un alert para fácil visualización
+    if (allValid) {
+      alert('✅ El formulario es VÁLIDO. El botón debería estar habilitado.\n\nRevisa la consola para más detalles.');
+    } else {
+      const reasons = invalidFields.map(f => `• ${f.field}: ${f.reason}`).join('\n');
+      alert(`❌ El formulario es INVÁLIDO por:\n\n${reasons}\n\nRevisa la consola para más detalles.`);
+    }
   }
 
   async showMemoryHelp(type: 'total' | 'heap'): Promise<void> {
@@ -222,45 +384,119 @@ export class ServerCreatePage {
   }
 
   isFormValid(): boolean {
-    return !!(this.serverData.name && this.serverData.host && this.serverData.rcon_port && this.serverData.rcon_password);
+    // Validar campos básicos requeridos (mínimos absolutos)
+    const hasName = !!(this.serverData.name && this.serverData.name.trim());
+    const hasHost = !!(this.serverData.host && this.serverData.host.trim());
+    const hasRconPassword = !!(this.serverData.rcon_password && this.serverData.rcon_password.trim());
+    
+    // Si faltan campos básicos, no es válido
+    if (!hasName || !hasHost || !hasRconPassword) {
+      return false;
+    }
+    
+    // Si auto-asignar puertos está activado, no validar puertos
+    if (this.autoAssignPorts) {
+      // Solo validar campos básicos y opcionales si están configurados
+      return this.validateOptionalFields();
+    }
+    
+    // Si auto-asignar está desactivado, los puertos son opcionales pero deben ser válidos si se especifican
+    if (this.serverData.port && (this.serverData.port < 1 || this.serverData.port > 65535)) {
+      return false;
+    }
+    if (this.serverData.rcon_port && (this.serverData.rcon_port < 1 || this.serverData.rcon_port > 65535)) {
+      return false;
+    }
+    
+    return this.validateOptionalFields();
+  }
+  
+  validateOptionalFields(): boolean {
+    // Validar memoria si está configurada (opcional)
+    if (this.serverData.memory_limit_mb) {
+      if (this.serverData.memory_limit_mb < 1024 || this.serverData.memory_limit_mb > 16384) {
+        return false;
+      }
+      
+      if (this.serverData.java_heap_max_mb) {
+        if (this.serverData.java_heap_max_mb < 512 || this.serverData.java_heap_max_mb >= this.serverData.memory_limit_mb) {
+          return false;
+        }
+      }
+    }
+    
+    // Validar max jugadores (debe estar en rango válido si se especifica)
+    if (this.serverData.max_players !== undefined && this.serverData.max_players !== null) {
+      if (this.serverData.max_players < 1 || this.serverData.max_players > 100) {
+        return false;
+      }
+    }
+    
+    // Validar puertos adicionales - solo validar si tienen un valor
+    // Si un puerto está vacío (0 o null), se ignora
+    for (const port of this.additionalPorts) {
+      // Solo validar si el puerto tiene un valor
+      if (port.port && port.port > 0) {
+        if (port.port < 1 || port.port > 65535) {
+          return false;
+        }
+        if (!port.protocol || (port.protocol !== 'tcp' && port.protocol !== 'udp')) {
+          return false;
+        }
+      }
+    }
+    
+    return true;
   }
 
   async createServer(): Promise<void> {
     try {
-      // Validación mejorada con mensajes específicos
-      if (!this.serverData.name) {
-        alert('❌ El nombre del servidor es requerido');
+      // Validar que el formulario sea válido antes de proceder
+      if (!this.isFormValid()) {
+        this.toast.error('Por favor completa todos los campos requeridos correctamente');
         return;
       }
 
-      if (!this.serverData.host) {
-        alert('❌ El host es requerido (IP o nombre del contenedor)');
+      // Validación mejorada con mensajes específicos
+      if (!this.serverData.name || !this.serverData.name.trim()) {
+        this.toast.error('El nombre del servidor es requerido');
+        return;
+      }
+
+      if (!this.serverData.host || !this.serverData.host.trim()) {
+        this.toast.error('El host es requerido (IP o nombre del contenedor)');
         return;
       }
 
       // Validar puertos solo si se especifican manualmente (no auto-asignación)
       if (!this.autoAssignPorts) {
         if (this.serverData.port && (this.serverData.port < 1 || this.serverData.port > 65535)) {
-          alert('❌ El puerto de Minecraft debe estar entre 1 y 65535');
+          this.toast.error('El puerto de Minecraft debe estar entre 1 y 65535');
           return;
         }
         if (this.serverData.rcon_port && (this.serverData.rcon_port < 1 || this.serverData.rcon_port > 65535)) {
-          alert('❌ El puerto RCON debe estar entre 1 y 65535');
+          this.toast.error('El puerto RCON debe estar entre 1 y 65535');
           return;
         }
       }
 
-      if (!this.serverData.rcon_password) {
-        alert('❌ La contraseña RCON es requerida');
+      if (!this.serverData.rcon_password || !this.serverData.rcon_password.trim()) {
+        this.toast.error('La contraseña RCON es requerida');
         return;
       }
 
       // Validar memoria si está configurada
       if (this.serverData.memory_limit_mb && this.serverData.java_heap_max_mb) {
         if (this.serverData.java_heap_max_mb >= this.serverData.memory_limit_mb) {
-          alert('❌ El heap máximo debe ser menor que la memoria total (deja 200MB para el sistema)');
+          this.toast.error('El heap máximo debe ser menor que la memoria total (deja 200MB para el sistema)');
           return;
         }
+      }
+      
+      // Validar max jugadores
+      if (this.serverData.max_players && (this.serverData.max_players < 1 || this.serverData.max_players > 100)) {
+        this.toast.error('El número máximo de jugadores debe estar entre 1 y 100');
+        return;
       }
 
       // Preparar puertos adicionales
@@ -308,7 +544,7 @@ export class ServerCreatePage {
             }
           }
           
-          alert(successMessage);
+          this.toast.success(successMessage);
           this.authService.setCurrentServerId(serverId);
           this.router.navigate(['/dashboard']);
         },
@@ -320,18 +556,18 @@ export class ServerCreatePage {
           if (error.error?.error) {
             errorMessage = error.error.error;
           } else if (error.status === 400) {
-            errorMessage = '❌ Datos inválidos. Verifica que todos los campos sean correctos.';
+            errorMessage = 'Datos inválidos. Verifica que todos los campos sean correctos.';
           } else if (error.status === 403) {
-            errorMessage = '❌ No tienes permisos para crear servidores';
+            errorMessage = 'No tienes permisos para crear servidores';
           } else if (error.status === 500) {
-            errorMessage = '❌ Error del servidor. Intenta de nuevo o contacta al administrador.';
+            errorMessage = 'Error del servidor. Intenta de nuevo o contacta al administrador.';
           }
           
-          alert(errorMessage);
+          this.toast.error(errorMessage);
         }
       });
-    } catch (error) {
-      alert('Error inesperado: ' + error);
+    } catch (error: any) {
+      this.toast.error('Error inesperado: ' + (error?.message || error));
     }
   }
 }

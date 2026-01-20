@@ -1,0 +1,51 @@
+# ============================================
+# Minecraft Admin Panel - Producción (Imágenes Locales)
+# Usar después de transferir imágenes por SSH
+# ============================================
+
+networks:
+  minecraft-admin:
+    external: true
+    name: minecraft-admin
+  minecraft-servers:
+    external: true
+    name: minecraft-servers
+
+services:
+  # Frontend Ionic (Nginx)
+  minecraft-admin-frontend:
+    image: minecraft-admin-frontend:latest
+    container_name: minecraft-admin-frontend
+    networks:
+      - minecraft-admin
+    ports:
+      - "${FRONTEND_PORT:-8080}:80"
+    restart: unless-stopped
+    depends_on:
+      - minecraft-admin-panel
+
+  # Panel Django de Administración (Backend API)
+  minecraft-admin-panel:
+    image: minecraft-admin-panel:latest
+    container_name: minecraft-admin-panel
+    networks:
+      - minecraft-admin
+      - minecraft-servers
+    expose:
+      - "8000"
+    env_file:
+      - .env
+    environment:
+      - MINECRAFT_DATA_PATH=${MINECRAFT_DATA_PATH:-/data}
+    volumes:
+      - minecraft_data:/data
+      - panel_static:/app/staticfiles
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /etc/profile.d/environment.sh:/etc/profile.d/environment.sh:ro
+    restart: unless-stopped
+
+volumes:
+  minecraft_data:
+    driver: local
+  panel_static:
+    driver: local

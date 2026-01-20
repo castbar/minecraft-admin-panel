@@ -42,8 +42,16 @@ class Server(models.Model):
     )
     port = models.IntegerField(default=25565, help_text="Puerto del servidor Minecraft")
     rcon_port = models.IntegerField(default=25575)
-    rcon_password = models.CharField(max_length=255)
+    rcon_password = models.CharField(max_length=500, help_text="Contraseña RCON (encriptada)")
     minecraft_data_path = models.CharField(max_length=500, default='/data')
+    
+    # Propietario del servidor (cada usuario gestiona sus propios servidores)
+    owner = models.ForeignKey(
+        User, 
+        on_delete=models.CASCADE, 
+        related_name='owned_servers',
+        help_text="Usuario propietario del servidor"
+    )
     # Puertos adicionales para mods/plugins (ej: Simple Voice Chat necesita UDP 24454)
     # Formato: [{"port": 24454, "protocol": "udp", "host_port": 24454}, ...]
     additional_ports = models.JSONField(
@@ -176,11 +184,25 @@ class Server(models.Model):
     
     def save(self, *args, **kwargs):
         """Sincronizar configuración con el servidor Minecraft"""
+        # Encriptar contraseña RCON si no está encriptada
+        from ..utils.encryption import encrypt_password, is_encrypted
+        if self.rcon_password and not is_encrypted(self.rcon_password):
+            self.rcon_password = encrypt_password(self.rcon_password)
+        
         # Generar API key si no existe y se necesita para database/both
         if self.auth_mode in ['database', 'both'] and not self.api_key:
             self.generate_api_key()
         super().save(*args, **kwargs)
         # TODO: Aplicar cambios al servidor vía RCON o archivos de configuración
+    
+    def get_rcon_password(self):
+        """Obtener contraseña RCON desencriptada"""
+        from ..utils.encryption import decrypt_password, is_encrypted
+        if not self.rcon_password:
+            return None
+        if is_encrypted(self.rcon_password):
+            return decrypt_password(self.rcon_password)
+        return self.rcon_password
     
     def get_auth_mode_display_short(self):
         """Obtener descripción corta del modo de autenticación"""

@@ -144,8 +144,9 @@
     </div>
   </div>
 
+  <!-- Botón FAB para crear servidor - siempre visible -->
   <ion-fab vertical="bottom" horizontal="end" slot="fixed">
-    <ion-fab-button routerLink="/servers/create">
+    <ion-fab-button (click)="createServer()" color="primary">
       <ion-icon name="add-outline"></ion-icon>
     </ion-fab-button>
   </ion-fab>

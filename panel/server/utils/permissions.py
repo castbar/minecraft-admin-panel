@@ -3,6 +3,15 @@ from django.http import JsonResponse
 import json
 from ..models import Server, UserServerRole
 
+def check_server_ownership(request, server):
+    """Verificar que el usuario es propietario del servidor"""
+    if server.owner != request.user:
+        return False, JsonResponse({
+            'success': False,
+            'error': 'Permission denied: You are not the owner of this server'
+        }, status=403)
+    return True, None
+
 def _get_server_id_from_request(request):
     """
     Helper común para obtener server_id de la request.
@@ -51,7 +60,7 @@ def _get_server_id_from_request(request):
     return None
 
 def require_server_permission(permission):
-    """Decorador para verificar permisos en servidores - Usa header X-Server-ID"""
+    """Decorador para verificar permisos en servidores - Solo el owner puede gestionar"""
     def decorator(view_func):
         @wraps(view_func)
         def wrapper(request, *args, **kwargs):
@@ -66,17 +75,16 @@ def require_server_permission(permission):
             
             try:
                 server = Server.objects.get(id=server_id, is_active=True)
-                user_role = UserServerRole.objects.filter(user=request.user, server=server).first()
                 
-                if not user_role:
-                    return JsonResponse({'success': False, 'error': 'No access to this server'}, status=403)
+                # Verificar que el usuario es el propietario del servidor
+                if server.owner != request.user:
+                    return JsonResponse({
+                        'success': False, 
+                        'error': 'Permission denied: You are not the owner of this server'
+                    }, status=403)
                 
-                if not user_role.has_permission(permission):
-                    return JsonResponse({'success': False, 'error': f'Permission denied: {permission} required'}, status=403)
-                
-                # Agregar server y user_role al request para uso en la vista
+                # Agregar server al request para uso en la vista
                 request.server = server
-                request.user_role = user_role
                 
                 return view_func(request, *args, **kwargs)
             except Server.DoesNotExist:

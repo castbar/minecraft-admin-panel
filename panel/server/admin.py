@@ -1,5 +1,8 @@
 from django.contrib import admin
+from django.contrib.admin import AdminSite
 from django.utils.html import format_html
+from django.contrib.auth.decorators import login_required, user_passes_test
+from django.shortcuts import redirect
 from .models import (
     Server, UserServerRole, MinecraftUser,
     Backup, BackupSchedule,
@@ -16,6 +19,32 @@ admin.site.index_title = format_html(
     '<span style="color: #667eea; font-weight: bold;">Minecraft Server Manager</span> - '
     'Desarrollado por <span style="color: #764ba2; font-weight: bold;">Castbar</span>'
 )
+
+# Restringir acceso al admin solo a usuarios staff
+def staff_required(user):
+    """Verificar que el usuario es staff"""
+    return user.is_authenticated and user.is_staff
+
+# Sobrescribir el método de login del admin para redirigir usuarios no staff
+original_admin_login = admin.site.login
+
+@login_required
+@user_passes_test(staff_required, login_url='/api/auth/login/')
+def admin_login_required(request):
+    """Redirigir usuarios no staff que intentan acceder al admin"""
+    if not request.user.is_staff:
+        # Redirigir al frontend (panel de Minecraft)
+        return redirect('/')
+    return original_admin_login(request)
+
+# Personalizar el AdminSite para requerir staff
+class StaffOnlyAdminSite(AdminSite):
+    def has_permission(self, request):
+        """Solo usuarios staff pueden acceder"""
+        return request.user.is_active and request.user.is_staff
+
+# Usar el AdminSite personalizado (opcional, Django admin ya verifica is_staff por defecto)
+# admin.site = StaffOnlyAdminSite(name='admin')
 
 @admin.register(Server)
 class ServerAdmin(admin.ModelAdmin):

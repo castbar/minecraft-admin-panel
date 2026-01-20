@@ -322,23 +322,36 @@
 
   <!-- Tab Usuarios -->
   <div *ngIf="activeTab === 'users' && authService.currentUser?.is_staff">
-    <ion-list>
-      <ion-item *ngFor="let user of djangoUsers">
-        <ion-label>
-          <h2>{{ user.username }}</h2>
-          <p>{{ user.email || 'Sin email' }}</p>
-        </ion-label>
-        <div slot="end">
-          <ion-badge *ngIf="user.is_staff" color="warning">Staff</ion-badge>
-          <ion-badge [color]="user.is_active ? 'success' : 'medium'">
-            {{ user.is_active ? 'Activo' : 'Inactivo' }}
-          </ion-badge>
-        </div>
-      </ion-item>
-    </ion-list>
+    <ion-card>
+      <ion-card-header>
+        <ion-card-title>Usuarios del Sistema</ion-card-title>
+      </ion-card-header>
+      <ion-card-content>
+        <ion-list>
+          <ion-item *ngFor="let user of djangoUsers">
+            <ion-label>
+              <h2>{{ user.username }}</h2>
+              <p>{{ user.email || 'Sin email' }}</p>
+            </ion-label>
+            <div slot="end">
+              <ion-badge *ngIf="user.is_staff" color="warning">Staff</ion-badge>
+              <ion-badge [color]="user.is_active ? 'success' : 'medium'">
+                {{ user.is_active ? 'Activo' : 'Inactivo' }}
+              </ion-badge>
+            </div>
+          </ion-item>
+          <ion-item *ngIf="djangoUsers.length === 0">
+            <ion-label>
+              <p>No hay usuarios registrados</p>
+            </ion-label>
+          </ion-item>
+        </ion-list>
+      </ion-card-content>
+    </ion-card>
 
-    <ion-fab vertical="bottom" horizontal="end" slot="fixed">
-      <ion-fab-button (click)="isCreateUserModalOpen = true">
+    <!-- Botón FAB para crear usuario - siempre visible si es staff -->
+    <ion-fab vertical="bottom" horizontal="end" slot="fixed" *ngIf="authService.currentUser?.is_staff">
+      <ion-fab-button (click)="isCreateUserModalOpen = true" color="primary">
         <ion-icon name="add-outline"></ion-icon>
       </ion-fab-button>
     </ion-fab>

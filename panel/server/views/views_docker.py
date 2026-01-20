@@ -58,12 +58,8 @@ def create_server(request):
         "minecraft_data_path": "/data"
     }
     """
-    # Solo admins pueden crear servidores
-    if not request.user.is_staff:
-        return JsonResponse({
-            'success': False,
-            'error': 'Permission denied: Only staff can create servers'
-        }, status=403)
+    # Cualquier usuario autenticado puede crear sus propios servidores
+    # No se requiere is_staff para crear servidores propios
     
     try:
         data = json.loads(request.body)
@@ -191,14 +187,16 @@ def create_server(request):
         # rcon_port ya está asignado correctamente arriba (auto-asignado o especificado)
         
         # Crear registro en la base de datos primero
+        # El owner será el usuario que crea el servidor
         server = Server.objects.create(
             name=data['name'],
             host=data['host'],
             container_name=data.get('container_name', data['host']),
             port=minecraft_port,
             rcon_port=rcon_port,
-            rcon_password=data['rcon_password'],
+            rcon_password=data['rcon_password'],  # Se encriptará automáticamente en save()
             minecraft_data_path=data.get('minecraft_data_path', '/data'),
+            owner=request.user,  # Usuario propietario del servidor
             is_active=True,
             enable_whitelist=data.get('enable_whitelist', True),
             online_mode=data.get('online_mode', False),
@@ -231,12 +229,8 @@ def create_server(request):
             additional_ports=data.get('additional_ports', []),
         )
         
-        # Asignar rol de admin al usuario que creó el servidor
-        UserServerRole.objects.create(
-            user=request.user,
-            server=server,
-            role='admin'
-        )
+        # El servidor ya tiene owner=request.user, no necesita UserServerRole
+        # (se mantiene UserServerRole para compatibilidad si se necesita compartir servidores en el futuro)
         
         # Crear contenedor Docker automáticamente
         container_result = None

@@ -16,7 +16,9 @@
           <ion-input 
             [(ngModel)]="serverData.name" 
             placeholder="Mi Servidor"
-            (ionInput)="serverData.name = $any($event.target).value">
+            (ionInput)="onFieldChange()"
+            (ionBlur)="onFieldChange()"
+            required>
           </ion-input>
         </ion-item>
         <ion-item>
@@ -24,7 +26,8 @@
           <ion-input 
             [(ngModel)]="serverData.host" 
             placeholder="localhost o IP"
-            (ionInput)="serverData.host = $any($event.target).value">
+            (ionInput)="serverData.host = $any($event.target).value"
+            required>
           </ion-input>
         </ion-item>
         <ion-item>
@@ -68,7 +71,9 @@
           <ion-input 
             type="password" 
             [(ngModel)]="serverData.rcon_password"
-            (ionInput)="serverData.rcon_password = $any($event.target).value">
+            (ionInput)="onFieldChange()"
+            (ionBlur)="onFieldChange()"
+            required>
           </ion-input>
         </ion-item>
         <ion-item>
@@ -212,15 +217,54 @@
           <ion-label>Agregar Puerto</ion-label>
         </ion-item>
       </ion-list>
+      <!-- Debug: Mostrar estado de validación (temporal) -->
+      <ion-item *ngIf="false" lines="none">
+        <ion-label>
+          <p style="font-size: 0.75rem; color: #666;">
+            Debug - Valid: {{ isFormValid() }}, 
+            Name: {{ !!serverData.name }}, 
+            Host: {{ !!serverData.host }}, 
+            Pass: {{ !!serverData.rcon_password }},
+            AutoPorts: {{ autoAssignPorts }}
+          </p>
+        </ion-label>
+      </ion-item>
+      
       <ion-button 
         expand="block" 
         (click)="createServer()" 
         class="ion-margin-top create-button"
-        [disabled]="!isFormValid() || isCreating">
+        [disabled]="!isFormValid() || isCreating"
+        [color]="isFormValid() && !isCreating ? 'primary' : 'medium'">
         <ion-spinner *ngIf="isCreating" name="crescent" slot="start"></ion-spinner>
         <ion-icon *ngIf="!isCreating" name="add-circle-outline" slot="start"></ion-icon>
         {{ isCreating ? 'Creando...' : 'Crear Servidor' }}
       </ion-button>
+      
+      <!-- Botón de debug para ver qué invalida el formulario -->
+      <ion-button 
+        expand="block" 
+        fill="outline"
+        color="warning"
+        (click)="debugValidation()" 
+        class="ion-margin-top">
+        <ion-icon name="bug-outline" slot="start"></ion-icon>
+        Debug: Ver por qué está deshabilitado
+      </ion-button>
+      
+      <!-- Mensaje de ayuda si el formulario no es válido -->
+      <ion-item *ngIf="!isFormValid() && (serverData.name || serverData.host || serverData.rcon_password)" lines="none" class="validation-help">
+        <ion-label>
+          <p style="color: var(--ion-color-warning); font-size: 0.875rem; margin: 0;">
+            ⚠️ Completa los campos requeridos: 
+            <span *ngIf="!serverData.name || !serverData.name.trim()" style="color: var(--ion-color-danger);">Nombre</span>
+            <span *ngIf="(!serverData.name || !serverData.name.trim()) && (!serverData.host || !serverData.host.trim())">, </span>
+            <span *ngIf="!serverData.host || !serverData.host.trim()" style="color: var(--ion-color-danger);">Host</span>
+            <span *ngIf="(!serverData.host || !serverData.host.trim()) && (!serverData.rcon_password || !serverData.rcon_password.trim())">, </span>
+            <span *ngIf="!serverData.rcon_password || !serverData.rcon_password.trim()" style="color: var(--ion-color-danger);">Contraseña RCON</span>
+          </p>
+        </ion-label>
+      </ion-item>
     </ion-card-content>
   </ion-card>
 </ion-content>

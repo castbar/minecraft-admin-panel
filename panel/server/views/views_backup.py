@@ -263,12 +263,91 @@ def backup_schedule_delete(request, server_id, schedule_id):
 
 def _execute_backup(backup_id):
     """Ejecutar backup en background"""
+    import docker
+    import tempfile
+    import shutil
+    
     try:
         backup = Backup.objects.get(id=backup_id)
         backup.status = 'running'
         backup.save()
         
         server = backup.server
+        
+        # Si el servidor tiene container_name, usar Docker para acceder a los archivos
+        if server.container_name:
+            try:
+                client = docker.from_env()
+                container = client.containers.get(server.container_name)
+                
+                # Crear directorio temporal para el backup
+                temp_dir = tempfile.mkdtemp()
+                backup_file = os.path.join(temp_dir, f"{backup.name}.tar.gz")
+                
+                # Crear backup dentro del contenedor del servidor
+                world_path = os.path.join(server.minecraft_data_path, 'world')
+                backup_dir = os.path.join(server.minecraft_data_path, 'backups')
+                
+                # Ejecutar comando tar dentro del contenedor para crear el backup
+                # Usar comando más simple y robusto - ignorar warnings de "file changed"
+                tar_cmd = f"cd {server.minecraft_data_path} && tar -czf {backup_dir}/{backup.name}.tar.gz world server.properties whitelist.json ops.json banned-players.json banned-ips.json 2>&1 || tar -czf {backup_dir}/{backup.name}.tar.gz world"
+                
+                result = container.exec_run(f"sh -c 'mkdir -p {backup_dir} && {tar_cmd}'", user='root')
+                
+                # Verificar salida - el warning "file changed as we read it" es normal cuando el servidor está corriendo
+                output = result.output.decode() if result.output else ''
+                
+                # Verificar que el archivo se creó (incluso si hubo warnings)
+                check_result = container.exec_run(f"test -f {backup_dir}/{backup.name}.tar.gz", user='root')
+                if check_result.exit_code != 0:
+                    # Si el archivo no existe, entonces hubo un error real
+                    error_msg = output if output else f"Exit code: {result.exit_code}"
+                    raise Exception(f"El archivo de backup no se creó en el contenedor. {error_msg}")
+                
+                # Si el archivo existe, el backup fue exitoso (aunque pueda haber warnings)
+                
+                # Copiar archivo usando docker cp
+                import subprocess
+                host_backup_dir = '/data/backups'
+                os.makedirs(host_backup_dir, exist_ok=True)
+                host_backup_file = os.path.join(host_backup_dir, f"{backup.name}.tar.gz")
+                
+                cp_result = subprocess.run(
+                    ['docker', 'cp', f'{server.container_name}:{backup_dir}/{backup.name}.tar.gz', host_backup_file],
+                    capture_output=True,
+                    text=True
+                )
+                
+                if cp_result.returncode != 0:
+                    raise Exception(f"Error copiando backup del contenedor: {cp_result.stderr}")
+                
+                if not os.path.exists(host_backup_file):
+                    raise Exception("El archivo de backup no existe después de copiar")
+                
+                file_size = os.path.getsize(host_backup_file)
+                backup.file_path = host_backup_file
+                backup.file_size = file_size
+                backup.status = 'completed'
+                backup.completed_at = timezone.now()
+                backup.save()
+                
+                # Limpiar backups antiguos si hay schedule
+                schedule = BackupSchedule.objects.filter(server=server, is_active=True).first()
+                if schedule:
+                    _cleanup_old_backups(server, schedule.max_backups)
+                
+                return
+                
+            except docker.errors.NotFound:
+                # Contenedor no encontrado, continuar con método local
+                pass
+            except Exception as e:
+                # Si falla Docker, intentar método local
+                import traceback
+                print(f"Error con Docker, intentando método local: {e}")
+                print(traceback.format_exc())
+        
+        # Método local (fallback o si no hay container_name)
         world_path = os.path.join(server.minecraft_data_path, 'world')
         backup_dir = os.path.join(server.minecraft_data_path, 'backups')
         os.makedirs(backup_dir, exist_ok=True)
@@ -283,6 +362,9 @@ def _execute_backup(backup_id):
             config_path = os.path.join(server.minecraft_data_path, 'server.properties')
             if os.path.exists(config_path):
                 tar.add(config_path, arcname='server.properties')
+            whitelist_path = os.path.join(server.minecraft_data_path, 'whitelist.json')
+            if os.path.exists(whitelist_path):
+                tar.add(whitelist_path, arcname='whitelist.json')
         
         file_size = os.path.getsize(backup_file)
         backup.file_path = backup_file
@@ -300,6 +382,9 @@ def _execute_backup(backup_id):
         backup.status = 'failed'
         backup.error_message = str(e)
         backup.save()
+        import traceback
+        print(f"Error en backup: {e}")
+        print(traceback.format_exc())
 
 def _cleanup_old_backups(server, max_backups):
     """Eliminar backups antiguos manteniendo solo los últimos N"""

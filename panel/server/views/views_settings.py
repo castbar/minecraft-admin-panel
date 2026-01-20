@@ -914,10 +914,16 @@ def _send_password_set_email(user, token):
         message = render_to_string('emails/password_set_invitation.txt', context)
         html_message = render_to_string('emails/password_set_invitation.html', context) if os.path.exists(os.path.join(settings.BASE_DIR, 'templates', 'emails', 'password_set_invitation.html')) else None
         
+        # Usar EMAIL_FROM_NAME si está disponible
+        from_email = settings.DEFAULT_FROM_EMAIL
+        from_name = getattr(settings, 'EMAIL_FROM_NAME', 'Minecraft Server Manager')
+        if from_name and from_email:
+            from_email = f"{from_name} <{from_email}>"
+        
         send_mail(
             subject=subject,
             message=message,
-            from_email=settings.DEFAULT_FROM_EMAIL,
+            from_email=from_email,
             recipient_list=[user.email],
             html_message=html_message,
             fail_silently=False,

@@ -254,4 +254,8 @@ export class ServerListPage implements OnInit {
       }
     });
   }
+
+  createServer(): void {
+    this.router.navigate(['/servers/create']);
+  }
 }

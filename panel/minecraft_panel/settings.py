@@ -175,7 +175,14 @@ CSRF_TRUSTED_ORIGINS = [
     'http://localhost:8080',  # Frontend Nginx
     'http://localhost:4200',  # Angular dev server
     'http://localhost:8100',  # Ionic dev server
+    'http://100.77.240.103:8080',  # Servidor de producción
+    'https://100.77.240.103:8080',  # Servidor de producción (HTTPS si aplica)
 ]
+
+# Agregar origen desde variable de entorno si está configurado
+site_url = os.environ.get('SITE_URL', '')
+if site_url and site_url not in CSRF_TRUSTED_ORIGINS:
+    CSRF_TRUSTED_ORIGINS.append(site_url)
 
 # Email Configuration
 # Soporta múltiples nombres de variables para compatibilidad con diferentes sistemas

@@ -227,6 +227,12 @@ def servers_list(request):
             'id': server.id,
             'name': server.name,
             'host': server.host,
+            'container_name': server.container_name,
+            'port': server.port,
+            'rcon_port': server.rcon_port,
+            'server_type': server.server_type,
+            'minecraft_version': server.minecraft_version,
+            'is_active': server.is_active,
             'role': 'owner',  # El propietario siempre tiene rol owner
             'is_hidden': server.is_hidden,
             'is_public': server.is_public,
